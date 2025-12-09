@@ -23,7 +23,7 @@ class User(Base, TimestampMixin):
         String(255), 
         unique=True, 
         nullable=False,
-        index=True  # Index for faster lookups
+        index=True
     )
     
     hashed_password = Column(
@@ -41,7 +41,10 @@ class User(Base, TimestampMixin):
         String(20), 
         default='user',
         nullable=False
-    )  # 'user' or 'admin'
+    )
+    
+    # Relationship is defined in APIKey model with backref
+    # So user.api_keys will work automatically
 
     def __repr__(self):
         return f"<User {self.email}>"

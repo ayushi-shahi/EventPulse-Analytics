@@ -7,12 +7,24 @@ from app.schemas.auth import (
     TokenRefresh,
     UserUpdate
 )
+from app.schemas.api_key import (
+    APIKeyCreate,
+    APIKeyResponse,
+    APIKeyWithSecret,
+    APIKeyStats
+)
 
 __all__ = [
+    # Auth
     "UserCreate",
     "UserLogin", 
     "UserResponse",
     "TokenResponse",
     "TokenRefresh",
-    "UserUpdate"
+    "UserUpdate",
+    # API Keys
+    "APIKeyCreate",
+    "APIKeyResponse",
+    "APIKeyWithSecret",
+    "APIKeyStats"
 ]

@@ -5,7 +5,8 @@ from typing import Optional, Any, Dict
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from app.config import settings
-
+import secrets
+import hashlib
 
 # -----------------------------------
 # Password Hashing (bcrypt)
@@ -99,3 +100,45 @@ def decode_token(token: str) -> Optional[Dict[str, Any]]:
         return payload
     except JWTError:
         return None
+
+# ============ API Key Functions ============
+
+def generate_api_key() -> str:
+    """
+    Generate a secure random API key.
+    Format: ep_live_<32_random_hex_chars>
+    
+    Returns:
+        Plain text API key (show to user once!)
+    """
+    random_part = secrets.token_hex(32)
+    return f"ep_live_{random_part}"
+
+
+def hash_api_key(api_key: str) -> str:
+    """
+    Hash an API key for storage.
+    Uses SHA-256 for fast verification (API keys are checked frequently).
+    
+    Args:
+        api_key: Plain text API key
+        
+    Returns:
+        Hashed API key
+    """
+    return hashlib.sha256(api_key.encode()).hexdigest()
+
+
+def verify_api_key(plain_key: str, hashed_key: str) -> bool:
+    """
+    Verify an API key against a hashed key.
+    
+    Args:
+        plain_key: Plain text API key from request
+        hashed_key: Hashed API key from database
+        
+    Returns:
+        True if matches, False otherwise
+    """
+    return hash_api_key(plain_key) == hashed_key
+
