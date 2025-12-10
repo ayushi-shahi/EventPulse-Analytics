@@ -1,10 +1,11 @@
-# backend/app/services/event_processor.py
+# backend/app/services/event_processor.py (update)
 from typing import List, Dict, Any
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import insert
 import json
+import redis.asyncio as redis
 
 from app.models.event import Event
 from app.config import settings
@@ -13,12 +14,11 @@ from app.config import settings
 class EventProcessor:
     """
     Service for processing events from the queue.
-    Handles batch insertion into the database.
+    Handles batch insertion into the database and broadcasting.
     """
     
     def __init__(self):
-        # Create a separate async engine for the worker
-        # Workers run in different processes, so they need their own connections
+        # Database engine
         self.engine = create_async_engine(
             settings.DATABASE_URL,
             echo=settings.DB_ECHO,
@@ -31,13 +31,31 @@ class EventProcessor:
             expire_on_commit=False,
             class_=AsyncSession
         )
+        
+        # Redis for broadcasting
+        self.redis_client = None
     
-    async def process_events_batch(self, events_json: List[str]) -> Dict[str, Any]:
+    async def _get_redis(self):
+        """Get or create Redis client"""
+        if self.redis_client is None:
+            self.redis_client = redis.from_url(
+                settings.REDIS_URL,
+                encoding="utf-8",
+                decode_responses=True
+            )
+        return self.redis_client
+    
+    async def process_events_batch(
+        self, 
+        events_json: List[str],
+        broadcast: bool = True
+    ) -> Dict[str, Any]:
         """
         Process a batch of events from the queue.
         
         Args:
             events_json: List of JSON strings from Redis queue
+            broadcast: Whether to broadcast events to WebSocket clients
             
         Returns:
             Dict with processing statistics
@@ -73,7 +91,7 @@ class EventProcessor:
         # Batch insert into database
         async with self.AsyncSessionLocal() as session:
             try:
-                # Prepare event objects for bulk insert
+                # Prepare event records for bulk insert
                 event_records = []
                 for event_data in parsed_events:
                     # Parse ISO timestamp strings back to datetime
@@ -93,12 +111,16 @@ class EventProcessor:
                         "received_at": received_at
                     })
                 
-                # Bulk insert using SQLAlchemy Core (faster than ORM)
+                # Bulk insert using SQLAlchemy Core
                 stmt = insert(Event).values(event_records)
                 await session.execute(stmt)
                 await session.commit()
                 
                 processed = len(event_records)
+                
+                # Broadcast events to WebSocket clients (if enabled)
+                if broadcast and processed > 0:
+                    await self._broadcast_events(parsed_events)
                 
             except Exception as e:
                 await session.rollback()
@@ -111,6 +133,41 @@ class EventProcessor:
             "errors": errors
         }
     
+    async def _broadcast_events(self, events: List[dict]):
+        """
+        Broadcast processed events to WebSocket clients via Redis Pub/Sub.
+        
+        Args:
+            events: List of event data dicts
+        """
+        try:
+            redis_client = await self._get_redis()
+            
+            # Group events by client_id for efficient broadcasting
+            events_by_client = {}
+            for event in events:
+                client_id = event["client_id"]
+                if client_id not in events_by_client:
+                    events_by_client[client_id] = []
+                events_by_client[client_id].append(event)
+            
+            # Publish to Redis channels
+            for client_id, client_events in events_by_client.items():
+                channel = f"events:{client_id}"
+                
+                # Send each event separately (or batch if you prefer)
+                for event in client_events:
+                    message = json.dumps({
+                        "client_id": client_id,
+                        "event": event
+                    })
+                    await redis_client.publish(channel, message)
+        
+        except Exception as e:
+            print(f"Error broadcasting events: {e}")
+    
     async def close(self):
-        """Close database connections"""
+        """Close database and Redis connections"""
         await self.engine.dispose()
+        if self.redis_client:
+            await self.redis_client.close()

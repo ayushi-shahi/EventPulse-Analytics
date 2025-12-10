@@ -1,0 +1,159 @@
+# backend/app/api/v1/websockets.py
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+import uuid
+import json
+
+from app.database import get_db
+from app.models.api_key import APIKey
+from app.core.security import verify_api_key
+from app.websockets.manager import manager
+from app.websockets.handlers import handle_client_message
+from sqlalchemy import select
+
+router = APIRouter()
+
+
+async def get_api_key_from_token(token: str, db: AsyncSession) -> APIKey:
+    """
+    Validate API key for WebSocket connection.
+    
+    Args:
+        token: API key from query parameter
+        db: Database session
+        
+    Returns:
+        APIKey object if valid
+        
+    Raises:
+        Exception if invalid
+    """
+    # Query all active API keys
+    result = await db.execute(
+        select(APIKey).where(APIKey.is_active == True)
+    )
+    api_keys = result.scalars().all()
+    
+    # Find matching key
+    for key in api_keys:
+        if verify_api_key(token, key.key_hash):
+            return key
+    
+    raise Exception("Invalid API key")
+
+
+@router.websocket("/live/{client_id}")
+async def websocket_live_feed(
+    websocket: WebSocket,
+    client_id: str,
+    token: str = Query(..., description="API key for authentication"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    WebSocket endpoint for real-time event feed.
+    
+    **Connection URL**: ws://localhost:8000/api/v1/ws/live/{client_id}?token=your_api_key
+    
+    **Authentication**: Pass API key as query parameter `token`
+    
+    **Message Types from Server**:
+    - `event`: New event data
+    - `metric`: Metric update
+    - `alert`: Alert notification
+    - `pong`: Response to ping
+    
+    **Message Types from Client**:
+    - `ping`: Keep-alive check
+    - `subscribe`: {"type": "subscribe", "channels": ["events", "metrics"]}
+    - `unsubscribe`: {"type": "unsubscribe", "channels": ["alerts"]}
+    - `get_stats`: Request connection statistics
+    
+    **Example Client Code (JavaScript)**:
+```javascript
+    const ws = new WebSocket('ws://localhost:8000/api/v1/ws/live/YOUR_CLIENT_ID?token=YOUR_API_KEY');
+    
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        console.log('Received:', data);
+    };
+    
+    // Send ping
+    ws.send(JSON.stringify({type: 'ping', timestamp: Date.now()}));
+```
+    """
+    connection_id = str(uuid.uuid4())
+    
+    try:
+        # Authenticate
+        api_key = await get_api_key_from_token(token, db)
+        
+        # Verify client_id matches API key
+        if str(api_key.id) != client_id:
+            await websocket.close(code=1008, reason="Client ID mismatch")
+            return
+        
+        # Connect
+        await manager.connect(
+            websocket, 
+            client_id, 
+            connection_id,
+            user_info={"api_key_name": api_key.client_name}
+        )
+        
+        # Send welcome message
+        await manager.send_personal_message(
+            {
+                "type": "connected",
+                "connection_id": connection_id,
+                "client_id": client_id,
+                "message": "WebSocket connected successfully",
+                "subscriptions": ["events", "metrics", "alerts"]
+            },
+            client_id,
+            connection_id
+        )
+        
+        # Listen for messages from client
+        while True:
+            data = await websocket.receive_text()
+            
+            try:
+                message = json.loads(data)
+                await handle_client_message(
+                    websocket,
+                    message,
+                    client_id,
+                    connection_id,
+                    manager
+                )
+            except json.JSONDecodeError:
+                await manager.send_personal_message(
+                    {
+                        "type": "error",
+                        "message": "Invalid JSON"
+                    },
+                    client_id,
+                    connection_id
+                )
+    
+    except WebSocketDisconnect:
+        manager.disconnect(client_id, connection_id)
+        print(f"Client {connection_id} disconnected normally")
+    
+    except Exception as e:
+        manager.disconnect(client_id, connection_id)
+        print(f"WebSocket error for {connection_id}: {e}")
+        try:
+            await websocket.close(code=1011, reason=str(e))
+        except:
+            pass
+
+
+@router.get("/connections")
+async def get_websocket_stats():
+    """
+    Get WebSocket connection statistics.
+    
+    Returns info about active connections.
+    """
+    return manager.get_stats()
