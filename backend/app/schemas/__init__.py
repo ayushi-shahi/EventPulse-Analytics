@@ -13,6 +13,13 @@ from app.schemas.api_key import (
     APIKeyWithSecret,
     APIKeyStats
 )
+from app.schemas.ingest import (
+    EventCreate,
+    EventBatchCreate,
+    EventResponse,
+    IngestionResponse,
+    IngestionError
+)
 
 __all__ = [
     # Auth
@@ -26,5 +33,11 @@ __all__ = [
     "APIKeyCreate",
     "APIKeyResponse",
     "APIKeyWithSecret",
-    "APIKeyStats"
+    "APIKeyStats",
+    # Events
+    "EventCreate",
+    "EventBatchCreate",
+    "EventResponse",
+    "IngestionResponse",
+    "IngestionError"
 ]

@@ -4,20 +4,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
 from app.models.api_key import APIKey
-from app.api.deps import get_api_key
+from app.api.deps import get_api_key, check_rate_limit
 
 router = APIRouter()
 
 
 @router.get("/")
 async def health_check(db: AsyncSession = Depends(get_db)):
-    """
-    Health check endpoint.
-    
-    Checks:
-    - API is running
-    - Database connection is working
-    """
+    """Health check endpoint - no authentication required"""
     try:
         await db.execute(text("SELECT 1"))
         db_status = "healthy"
@@ -32,17 +26,15 @@ async def health_check(db: AsyncSession = Depends(get_db)):
 
 @router.get("/protected")
 async def protected_endpoint(
-    api_key: APIKey = Depends(get_api_key)
+    api_key: APIKey = Depends(check_rate_limit)  # Now with rate limiting!
 ):
     """
-    Test endpoint that requires API key authentication.
+    Test endpoint with API key authentication AND rate limiting.
     
-    Use either:
-    - Header: X-API-Key: your_key_here
-    - Header: Authorization: ApiKey your_key_here
+    Try calling this repeatedly to see rate limiting in action!
     """
     return {
-        "message": "Success! You're authenticated with an API key",
+        "message": "Success! You're authenticated and under rate limit",
         "client_name": api_key.client_name,
-        "rate_limit": api_key.rate_limit
+        "rate_limit": f"{api_key.rate_limit} requests/minute"
     }
