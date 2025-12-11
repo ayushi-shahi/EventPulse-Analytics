@@ -1,3 +1,4 @@
+# backend/app/database.py
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import declarative_base
 from app.config import settings
@@ -8,8 +9,8 @@ engine = create_async_engine(
     echo=settings.DB_ECHO,
 )
 
-# Async session - use async_sessionmaker instead of sessionmaker
-async_session = async_sessionmaker(
+# Async session - MUST be named AsyncSessionLocal
+AsyncSessionLocal = async_sessionmaker(  # ← This name is important!
     engine, 
     expire_on_commit=False, 
     class_=AsyncSession
@@ -20,10 +21,12 @@ Base = declarative_base()
 
 # Dependency to get DB session in FastAPI
 async def get_db():
-    async with async_session() as session:
+    async with AsyncSessionLocal() as session:  # ← Use AsyncSessionLocal here
         try:
             yield session
             await session.commit()
         except Exception:
             await session.rollback()
             raise
+        finally:
+            await session.close()

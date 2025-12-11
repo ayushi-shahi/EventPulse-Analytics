@@ -20,6 +20,14 @@ from app.schemas.ingest import (
     IngestionResponse,
     IngestionError
 )
+from app.schemas.metrics import (
+    MetricDataPoint,
+    TimeSeriesMetric,
+    OverviewMetrics,
+    TopEventsMetric,
+    ActiveUsersMetric,
+    MetricQuery
+)
 
 __all__ = [
     # Auth
@@ -39,5 +47,12 @@ __all__ = [
     "EventBatchCreate",
     "EventResponse",
     "IngestionResponse",
-    "IngestionError"
+    "IngestionError",
+    # Metrics
+    "MetricDataPoint",
+    "TimeSeriesMetric",
+    "OverviewMetrics",
+    "TopEventsMetric",
+    "ActiveUsersMetric",
+    "MetricQuery"
 ]

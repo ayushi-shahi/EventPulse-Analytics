@@ -59,7 +59,7 @@ async def _process_event_batch_async(batch_size: int = 100):
         events = []
         for _ in range(batch_size):
             # LPOP removes and returns first element
-            event_json = redis_client.lpop("event_queue")
+            event_json = redis_client.rpop("event_queue")
             if event_json is None:
                 break  # Queue is empty
             events.append(event_json)
