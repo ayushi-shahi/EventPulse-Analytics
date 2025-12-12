@@ -10,6 +10,7 @@ celery_app = Celery(
     include=[
         "app.tasks.tasks_ingest",      # Import ingestion task modules
         "app.tasks.tasks_aggregates",  # Import aggregation task modules
+        "app.tasks.tasks_alerts",
     ]
 )
 
@@ -64,5 +65,10 @@ celery_app.conf.beat_schedule = {
         "task": "app.tasks.tasks_ingest.process_event_batch",
         "schedule": 5.0,  # Every 5 seconds
         "args": [100]
+    },
+    
+    "evaluate-alerts": {
+        "task": "app.tasks.tasks_alerts.evaluate_alerts",
+        "schedule": 60.0,  # Every 60 seconds
     },
 }

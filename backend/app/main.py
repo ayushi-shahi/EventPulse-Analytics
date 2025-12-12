@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 from app.config import settings
-from app.api.v1 import auth, api_keys, ingest, admin, health, websockets, metrics
+from app.api.v1 import auth, api_keys, ingest, metrics, alerts, admin, health, websockets
 from app.core.rate_limiter import rate_limiter
 from app.services.websocket_broadcaster import broadcaster
 
@@ -28,6 +28,7 @@ app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(api_keys.router, prefix="/api/v1/api-keys", tags=["API Keys"])
 app.include_router(ingest.router, prefix="/api/v1/ingest", tags=["Event Ingestion"])
 app.include_router(metrics.router, prefix="/api/v1/metrics", tags=["Metrics"])
+app.include_router(alerts.router, prefix="/api/v1/alerts", tags=["Alerts"])
 app.include_router(admin.router, prefix="/api/v1/admin", tags=["Admin"])
 app.include_router(websockets.router, prefix="/api/v1/ws", tags=["WebSockets"])
 app.include_router(health.router, prefix="/api/v1/health", tags=["Health"])
@@ -50,15 +51,12 @@ async def startup_event():
     print("🚀 EventPulse starting...")
     print(f"Environment: {settings.APP_ENV}")
     
-    # Initialize rate limiter
     await rate_limiter.initialize()
     print("✅ Rate limiter initialized")
     
-    # Initialize broadcaster
     await broadcaster.initialize()
     print("✅ WebSocket broadcaster initialized")
     
-    # Start broadcaster as background task
     asyncio.create_task(broadcaster.subscribe_and_broadcast())
     print("✅ WebSocket broadcaster running")
 

@@ -28,6 +28,15 @@ from app.schemas.metrics import (
     ActiveUsersMetric,
     MetricQuery
 )
+from app.schemas.alert import (
+    AlertExpression,
+    NotificationChannels,
+    AlertCreate,
+    AlertUpdate,
+    AlertResponse,
+    AlertHistoryResponse,
+    AlertTestResponse
+)
 
 __all__ = [
     # Auth
@@ -54,5 +63,13 @@ __all__ = [
     "OverviewMetrics",
     "TopEventsMetric",
     "ActiveUsersMetric",
-    "MetricQuery"
+    "MetricQuery",
+    # Alerts
+    "AlertExpression",
+    "NotificationChannels",
+    "AlertCreate",
+    "AlertUpdate",
+    "AlertResponse",
+    "AlertHistoryResponse",
+    "AlertTestResponse"
 ]

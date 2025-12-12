@@ -63,7 +63,7 @@ if __name__ == "__main__":
                 if event_count % 10 == 0:
                     print(f"\n📊 Sent {event_count} events so far\n")
             
-            time.sleep(2)  # 2 seconds between events
+            time.sleep(0.1)  # 2 seconds between events
     
     except KeyboardInterrupt:
         print(f"\n\n👋 Stopped. Total events sent: {event_count}")

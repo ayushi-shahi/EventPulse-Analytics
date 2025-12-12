@@ -88,6 +88,25 @@ class WebSocketBroadcaster:
         })
         
         await self.redis_client.publish(channel, message)
+        
+    async def publish_alert(self, client_id: str, alert_data: Dict[str, Any]):
+        """
+        Publish an alert notification.
+        
+        Args:
+            client_id: Client ID to send to
+            alert_data: Alert notification data
+        """
+        if self.redis_client is None:
+            await self.initialize()
+        
+        channel = f"alerts:{client_id}"
+        message = json.dumps({
+            "client_id": client_id,
+            "alert": alert_data
+        })
+        
+        await self.redis_client.publish(channel, message)
     
     async def subscribe_and_broadcast(self):
         """
@@ -152,9 +171,16 @@ class WebSocketBroadcaster:
             
             elif channel.startswith("alerts:"):
                 # Broadcast alert
+                alert_data = data.get("alert", {})
                 alert_msg = {
                     "type": "alert",
-                    "data": data
+                    "alert_id": alert_data.get("alert_id"),
+                    "alert_name": alert_data.get("alert_name"),
+                    "severity": alert_data.get("severity"),
+                    "message": alert_data.get("message"),
+                    "context": alert_data.get("context"),
+                    "triggered_at": alert_data.get("triggered_at"),
+                    "timestamp": alert_data.get("timestamp")
                 }
                 await manager.broadcast_to_client(alert_msg, client_id, channel="alerts")
         
