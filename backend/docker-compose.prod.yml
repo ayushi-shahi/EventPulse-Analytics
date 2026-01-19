@@ -1,0 +1,121 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: eventpulse_db_prod
+    environment:
+      POSTGRES_USER: eventpulse_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secure_production_password}
+      POSTGRES_DB: EventPulse
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eventpulse_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - eventpulse_network_prod
+    restart: always
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: eventpulse_redis_prod
+    volumes:
+      - redis_data_prod:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - eventpulse_network_prod
+    restart: always
+
+  # FastAPI Application (Production with Gunicorn)
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: eventpulse_api_prod
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-change-this-to-random-secret-in-production}
+      - DATABASE_URL=postgresql+asyncpg://eventpulse_user:${DB_PASSWORD:-secure_production_password}@postgres:5432/EventPulse
+      - REDIS_URL=redis://redis:6379/0
+      - APP_ENV=production
+      - DEBUG=False
+      - LOG_LEVEL=INFO
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - eventpulse_network_prod
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+
+  # Celery Worker
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: eventpulse_worker_prod
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-change-this-to-random-secret-in-production}
+      - DATABASE_URL=postgresql+asyncpg://eventpulse_user:${DB_PASSWORD:-secure_production_password}@postgres:5432/EventPulse
+      - REDIS_URL=redis://redis:6379/0
+      - APP_ENV=production
+      - LOG_LEVEL=INFO
+    depends_on:
+      - postgres
+      - redis
+      - api
+    command: celery -A worker.celery_app worker --loglevel=info --concurrency=4
+    networks:
+      - eventpulse_network_prod
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+
+  # Celery Beat (Scheduler)
+  celery_beat:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: eventpulse_beat_prod
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-change-this-to-random-secret-in-production}
+      - DATABASE_URL=postgresql+asyncpg://eventpulse_user:${DB_PASSWORD:-secure_production_password}@postgres:5432/EventPulse
+      - REDIS_URL=redis://redis:6379/0
+      - APP_ENV=production
+      - LOG_LEVEL=INFO
+    depends_on:
+      - postgres
+      - redis
+      - celery_worker
+    command: celery -A beat.celery_app beat --loglevel=info
+    networks:
+      - eventpulse_network_prod
+    restart: always
+
+volumes:
+  postgres_data_prod:
+  redis_data_prod:
+
+networks:
+  eventpulse_network_prod:
+    driver: bridge

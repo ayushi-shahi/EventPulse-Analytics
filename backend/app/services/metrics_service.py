@@ -8,20 +8,35 @@ from sqlalchemy.dialects.postgresql import insert
 from app.models.event import Event
 from app.models.aggregate import Aggregate
 
-
 class MetricsService:
     """
     Service for computing and retrieving metrics.
-    
-    Computes:
-    - Events per minute/hour
-    - Active users in time windows
-    - Top events by count
-    - Event distribution
     """
     
     def __init__(self, db: AsyncSession):
         self.db = db
+    
+    def _evaluate_condition(self, value: float, operator: str, threshold: float) -> bool:
+        """Evaluate condition like '100 > 50' - USED BY ALERTS."""
+        try:
+            value = float(value)
+            threshold = float(threshold)
+            
+            match operator:
+                case ">":
+                    return value > threshold
+                case "<":
+                    return value < threshold
+                case "==":
+                    return value == threshold
+                case ">=":
+                    return value >= threshold
+                case "<=":
+                    return value <= threshold
+                case _:
+                    return False
+        except (ValueError, TypeError):
+            return False
     
     async def compute_events_per_minute(
         self, 

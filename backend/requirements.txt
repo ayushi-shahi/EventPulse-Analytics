@@ -4,6 +4,7 @@ uvicorn[standard]==0.27.0
 pydantic==2.5.3
 pydantic-settings==2.1.0
 python-multipart==0.0.6
+gunicorn
 
 # Database
 sqlalchemy==2.0.25
@@ -54,6 +55,7 @@ flake8==7.0.0
 mypy==1.8.0
 pre-commit==3.6.0
 
+email-validator
 # Optional: Elasticsearch
 # elasticsearch==8.11.1
 

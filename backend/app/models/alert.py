@@ -3,6 +3,8 @@ from sqlalchemy import Column, String, Boolean, Index, Integer
 from sqlalchemy.dialects.postgresql import UUID, JSONB, TIMESTAMP
 from datetime import datetime, timezone
 from app.models.base import Base, TimestampMixin
+import uuid
+
 
 
 class Alert(Base, TimestampMixin):
@@ -20,7 +22,7 @@ class Alert(Base, TimestampMixin):
     id = Column(
         UUID(as_uuid=True),
         primary_key=True,
-        server_default="gen_random_uuid()"
+        default=uuid.uuid4
     )
     
     # Which client this alert belongs to
@@ -111,7 +113,7 @@ class AlertHistory(Base, TimestampMixin):
     id = Column(
         UUID(as_uuid=True),
         primary_key=True,
-        server_default="gen_random_uuid()"
+        default=uuid.uuid4
     )
     
     # Which alert triggered

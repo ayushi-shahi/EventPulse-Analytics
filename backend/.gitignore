@@ -65,3 +65,10 @@ test_*.py
 
 dump.rdb
 *.rdb
+# Celery runtime files (regenerate on docker-compose up)
+celerybeat-schedule
+celerybeat-schedule.*
+celerybeat.pid
+celeryd.pid
+
+# ... rest of your existing .gitignore

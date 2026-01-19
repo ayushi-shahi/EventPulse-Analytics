@@ -1,11 +1,20 @@
 # backend/app/main.py (update)
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import asyncio
+import logging
+import time
+
 from app.config import settings
 from app.api.v1 import auth, api_keys, ingest, metrics, alerts, admin, health, websockets
 from app.core.rate_limiter import rate_limiter
 from app.services.websocket_broadcaster import broadcaster
+from app.logging_config import setup_logging, get_logger
+
+# Setup logging
+setup_logging()
+logger = get_logger(__name__)
 
 app = FastAPI(
     title="EventPulse API",
@@ -23,6 +32,61 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# Request logging middleware
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """
+    Log all HTTP requests with timing.
+    """
+    start_time = time.time()
+    
+    # Log request
+    logger.info(f"Request: {request.method} {request.url.path}")
+    
+    try:
+        response = await call_next(request)
+        
+        # Calculate duration
+        duration = time.time() - start_time
+        
+        # Log response
+        logger.info(
+            f"Response: {request.method} {request.url.path} "
+            f"- Status: {response.status_code} - Duration: {duration:.3f}s"
+        )
+        
+        # Add timing header
+        response.headers["X-Process-Time"] = str(duration)
+        
+        return response
+    
+    except Exception as e:
+        logger.error(f"Request failed: {request.method} {request.url.path} - Error: {str(e)}")
+        raise
+
+
+# Global exception handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """
+    Catch all unhandled exceptions and return proper error response.
+    """
+    logger.error(
+        f"Unhandled exception: {type(exc).__name__} - {str(exc)}",
+        exc_info=True
+    )
+    
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Internal server error",
+            "error_type": type(exc).__name__,
+            "path": request.url.path
+        }
+    )
+
+
 # Include routers
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(api_keys.router, prefix="/api/v1/api-keys", tags=["API Keys"])
@@ -37,10 +101,12 @@ app.include_router(health.router, prefix="/api/v1/health", tags=["Health"])
 @app.get("/")
 async def root():
     """Root endpoint - API information"""
+    logger.debug("Root endpoint accessed")
     return {
         "name": "EventPulse API",
         "version": "1.0.0",
         "status": "running",
+        "environment": settings.APP_ENV,
         "docs": "/docs",
         "websocket": "ws://localhost:8000/api/v1/ws/live/{client_id}?token=YOUR_API_KEY"
     }
@@ -48,25 +114,37 @@ async def root():
 
 @app.on_event("startup")
 async def startup_event():
-    print("🚀 EventPulse starting...")
-    print(f"Environment: {settings.APP_ENV}")
+    logger.info("=" * 60)
+    logger.info("EventPulse starting...")
+    logger.info(f"Environment: {settings.APP_ENV}")
+    logger.info(f"Debug Mode: {settings.DEBUG}")
+    logger.info(f"Log Level: {settings.LOG_LEVEL}")
     
+    # Initialize rate limiter
     await rate_limiter.initialize()
-    print("✅ Rate limiter initialized")
+    logger.info("Rate limiter initialized")
     
+    # Initialize broadcaster
     await broadcaster.initialize()
-    print("✅ WebSocket broadcaster initialized")
+    logger.info("WebSocket broadcaster initialized")
     
+    # Start broadcaster task
     asyncio.create_task(broadcaster.subscribe_and_broadcast())
-    print("✅ WebSocket broadcaster running")
+    logger.info("WebSocket broadcaster running")
+    
+    logger.info("=" * 60)
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    print("🛑 EventPulse shutting down...")
+    logger.info("=" * 60)
+    logger.info("EventPulse shutting down...")
     
     await rate_limiter.close()
-    print("✅ Rate limiter closed")
+    logger.info("Rate limiter closed")
     
     await broadcaster.close()
-    print("✅ WebSocket broadcaster closed")
+    logger.info("WebSocket broadcaster closed")
+    
+    logger.info("Shutdown complete")
+    logger.info("=" * 60)
