@@ -1,36 +1,25 @@
-# backend/app/services/alert_notification.py
 from typing import Dict, Any, List
-import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.models.alert import Alert, AlertHistory
 from app.services.websocket_broadcaster import broadcaster
+from app.services.email_service import email_service
+from app.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class AlertNotificationService:
-    """
-    Service for sending alert notifications.
-    
-    Supports:
-    - WebSocket notifications (real-time)
-    - Email notifications (future)
-    """
-    
+    """Service for sending alert notifications via multiple channels"""
+
     async def send_alert_notification(
         self,
         alert: Alert,
         history: AlertHistory
     ):
-        """
-        Send notification for a triggered alert.
-        
-        Args:
-            alert: Alert that triggered
-            history: AlertHistory record
-        """
+        """Send notification via configured channels"""
         notification_channels = alert.notification_channels or {}
-        
-        # Prepare notification payload
+
         notification = {
             "type": "alert",
             "alert_id": str(alert.id),
@@ -39,68 +28,66 @@ class AlertNotificationService:
             "message": history.message,
             "context": history.context,
             "triggered_at": history.triggered_at.isoformat(),
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
-        
-        # Send via WebSocket
+
+        # WebSocket notification (default: enabled)
         if notification_channels.get("websocket", True):
             await self._send_websocket_notification(
                 client_id=str(alert.client_id),
-                notification=notification
+                notification=notification,
             )
-        
-        # Send via Email (if configured)
+
+        # Email notification (optional)
         email_addresses = notification_channels.get("email")
         if email_addresses and isinstance(email_addresses, list):
             await self._send_email_notification(
                 email_addresses=email_addresses,
-                notification=notification
+                alert=alert,
+                notification=notification,
             )
-    
+
     async def _send_websocket_notification(
         self,
         client_id: str,
-        notification: Dict[str, Any]
+        notification: Dict[str, Any],
     ):
-        """
-        Send alert via WebSocket.
-        
-        Args:
-            client_id: Client UUID
-            notification: Notification payload
-        """
+        """Send alert via WebSocket"""
         try:
-            # Publish to Redis (broadcaster will pick it up)
             await broadcaster.publish_alert(client_id, notification)
-            print(f"🚨 Alert notification sent via WebSocket: {notification['alert_name']}")
-        
+            logger.info(f"🚨 Alert sent via WebSocket: {notification['alert_name']}")
         except Exception as e:
-            print(f"❌ Failed to send WebSocket notification: {e}")
-    
+            logger.error(
+                f"Failed to send WebSocket notification: {e}",
+                exc_info=True,
+            )
+
     async def _send_email_notification(
         self,
         email_addresses: List[str],
-        notification: Dict[str, Any]
+        alert: Alert,
+        notification: Dict[str, Any],
     ):
-        """
-        Send alert via email.
-        
-        TODO: Implement actual email sending (SMTP, SendGrid, etc.)
-        
-        Args:
-            email_addresses: List of recipient emails
-            notification: Notification payload
-        """
-        # For now, just log (we'll implement email in post-launch)
-        print(f"📧 Email notification would be sent to: {', '.join(email_addresses)}")
-        print(f"   Subject: [EventPulse] Alert: {notification['alert_name']}")
-        print(f"   Message: {notification['message']}")
-        
-        # TODO: Implement using SMTP or email service
-        # Example with SMTP:
-        # import smtplib
-        # from email.mime.text import MIMEText
-        # ...
+        """Send alert via email"""
+        try:
+            success = await email_service.send_alert_email(
+                to_addresses=email_addresses,
+                alert_name=notification["alert_name"],
+                severity=notification["severity"],
+                message=notification["message"],
+                context=notification.get("context"),
+            )
+
+            if success:
+                logger.info(f"📧 Alert email sent: {notification['alert_name']}")
+            else:
+                logger.warning("📧 Email sending failed (check SMTP config)")
+
+        except Exception as e:
+            logger.error(
+                f"Email notification error: {e}",
+                exc_info=True,
+            )
 
 
 # Global instance

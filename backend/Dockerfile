@@ -37,3 +37,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 
 # Default command (can be overridden in docker-compose)
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# For Alpine-based images
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+

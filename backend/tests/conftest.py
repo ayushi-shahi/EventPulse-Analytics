@@ -1,5 +1,5 @@
 # backend/tests/conftest.py
-import pytest
+import pytest, os
 import asyncio
 from typing import AsyncGenerator, Generator
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -12,8 +12,10 @@ from app.models.base import Base
 from app.config import settings
 
 # Test database URL (use a separate test database)
-TEST_DATABASE_URL = "postgresql+asyncpg://eventpulse_user:Ayushishahi14@localhost:5432/EventPulse_test"
-
+TEST_DATABASE_URL = os.getenv(
+    "TEST_DATABASE_URL",
+    "postgresql+asyncpg://eventpulse_user:password@localhost:5432/EventPulse_test"
+)
 # Create test engine
 test_engine = create_async_engine(TEST_DATABASE_URL, echo=False)
 

@@ -5,28 +5,19 @@ import json
 import asyncio
 from datetime import datetime
 
+from app.logging_config import get_logger
+
+logger = get_logger(__name__)
+
 
 class ConnectionManager:
-    """
-    Manages WebSocket connections for real-time updates.
+    """Manages WebSocket connections with rate limiting"""
     
-    Supports:
-    - Per-client connections (isolated by client_id)
-    - Broadcasting to all connections for a client
-    - Channel subscriptions (events, metrics, alerts)
-    """
-    
-    def __init__(self):
-        # Structure: {client_id: {connection_id: WebSocket}}
+    def __init__(self, max_connections_per_client: int = 100):
         self.active_connections: Dict[str, Dict[str, WebSocket]] = {}
-        
-        # Track which channels each connection is subscribed to
-        # Structure: {connection_id: Set[channel_names]}
         self.subscriptions: Dict[str, Set[str]] = {}
-        
-        # Connection metadata
-        # Structure: {connection_id: {client_id, connected_at, user_info}}
         self.connection_metadata: Dict[str, dict] = {}
+        self.max_connections_per_client = max_connections_per_client  # NEW
     
     async def connect(
         self, 
@@ -35,35 +26,41 @@ class ConnectionManager:
         connection_id: str,
         user_info: dict = None
     ):
-        """
-        Accept and register a new WebSocket connection.
+        """Accept and register a new WebSocket connection with rate limiting"""
         
-        Args:
-            websocket: FastAPI WebSocket instance
-            client_id: API key client ID
-            connection_id: Unique connection identifier
-            user_info: Optional metadata about the connection
-        """
+        # Check connection limit
+        if client_id in self.active_connections:
+            current_count = len(self.active_connections[client_id])
+            if current_count >= self.max_connections_per_client:
+                logger.warning(
+                    f"Connection limit reached for client {client_id}: "
+                    f"{current_count}/{self.max_connections_per_client}"
+                )
+                await websocket.close(
+                    code=1008,
+                    reason=f"Too many connections (max: {self.max_connections_per_client})"
+                )
+                return False
+        
         await websocket.accept()
         
-        # Initialize client connections if first connection
         if client_id not in self.active_connections:
             self.active_connections[client_id] = {}
         
-        # Register connection
         self.active_connections[client_id][connection_id] = websocket
-        
-        # Initialize subscriptions (default: all channels)
         self.subscriptions[connection_id] = {"events", "metrics", "alerts"}
-        
-        # Store metadata
         self.connection_metadata[connection_id] = {
             "client_id": client_id,
             "connected_at": datetime.utcnow().isoformat(),
             "user_info": user_info or {}
         }
         
-        print(f"✅ WebSocket connected: {connection_id} for client {client_id}")
+        logger.info(
+            f"✅ WebSocket connected: {connection_id} for client {client_id} "
+            f"({len(self.active_connections[client_id])}/{self.max_connections_per_client})"
+        )
+        
+        return True
     
     def disconnect(self, client_id: str, connection_id: str):
         """
@@ -202,4 +199,4 @@ class ConnectionManager:
 
 
 # Global connection manager instance
-manager = ConnectionManager()
+manager = ConnectionManager(max_connections_per_client=100)

@@ -230,7 +230,7 @@ MIT License - see LICENSE file
 
 ## Author
 
-Your Name - [@yourtwitter](https://twitter.com/yourtwitter)
+Your Name -
 
 Project Link: [https://github.com/yourusername/eventpulse-analytics](https://github.com/yourusername/eventpulse-analytics)
 

@@ -1,5 +1,4 @@
-# backend/docker-compose.yml
-version: '3.8'
+version: "3.9"
 
 services:
   # PostgreSQL Database
@@ -18,7 +17,9 @@ services:
       test: ["CMD-SHELL", "pg_isready -U eventpulse_user"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+    mem_limit: 512m
+    restart: unless-stopped
     networks:
       - eventpulse_network
 
@@ -32,10 +33,12 @@ services:
       - redis_data:/data
     command: redis-server --appendonly yes
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -h 127.0.0.1 ping | grep PONG"]
       interval: 10s
       timeout: 5s
       retries: 5
+    mem_limit: 256m
+    restart: unless-stopped
     networks:
       - eventpulse_network
 
@@ -49,9 +52,9 @@ services:
       - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-in-production}
       - DATABASE_URL=postgresql+asyncpg://eventpulse_user:${DB_PASSWORD:-password}@postgres:5432/EventPulse
       - REDIS_URL=redis://redis:6379/0
-      - APP_ENV=${APP_ENV:-development}
-      - DEBUG=${DEBUG:-True}
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - APP_ENV=production
+      - DEBUG=False
+      - LOG_LEVEL=INFO
     ports:
       - "8000:8000"
     volumes:
@@ -62,10 +65,17 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    mem_limit: 1g
+    cpus: "1.0"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:8000/api/v1/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - eventpulse_network
-    restart: unless-stopped
 
   # Celery Worker
   celery_worker:
@@ -77,19 +87,29 @@ services:
       - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-in-production}
       - DATABASE_URL=postgresql+asyncpg://eventpulse_user:${DB_PASSWORD:-password}@postgres:5432/EventPulse
       - REDIS_URL=redis://redis:6379/0
-      - APP_ENV=${APP_ENV:-development}
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - APP_ENV=production
+      - LOG_LEVEL=INFO
     volumes:
       - ./app:/app/app
       - ./logs:/app/logs
     depends_on:
-      - postgres
-      - redis
-      - api
-    command: celery -A worker.celery_app worker --loglevel=info --pool=solo
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    command: celery -A worker.celery_app worker --loglevel=info --concurrency=2
+    mem_limit: 1g
+    cpus: "1.0"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A worker.celery_app inspect ping || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks:
       - eventpulse_network
-    restart: unless-stopped
 
   # Celery Beat (Scheduler)
   celery_beat:
@@ -101,19 +121,29 @@ services:
       - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-in-production}
       - DATABASE_URL=postgresql+asyncpg://eventpulse_user:${DB_PASSWORD:-password}@postgres:5432/EventPulse
       - REDIS_URL=redis://redis:6379/0
-      - APP_ENV=${APP_ENV:-development}
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - APP_ENV=production
+      - LOG_LEVEL=INFO
     volumes:
       - ./app:/app/app
       - ./logs:/app/logs
     depends_on:
-      - postgres
-      - redis
-      - celery_worker
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      celery_worker:
+        condition: service_healthy
     command: celery -A beat.celery_app beat --loglevel=info
+    mem_limit: 512m
+    cpus: "0.5"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python /app/app/beat_health.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks:
       - eventpulse_network
-    restart: unless-stopped
 
 volumes:
   postgres_data:

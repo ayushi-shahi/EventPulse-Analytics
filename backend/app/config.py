@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     LOG_LEVEL: str = "INFO"
     TIMEZONE: str = "UTC"
+    
+    # Monitoring & Observability
+    # ----------------------------
+    SENTRY_DSN: str | None = None
+    SENTRY_ENVIRONMENT: str | None = None
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.1  # 10% of transactions
 
     # ----------------------------
     # Email / Notifications

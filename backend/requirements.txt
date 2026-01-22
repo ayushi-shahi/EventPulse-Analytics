@@ -37,6 +37,7 @@ aiohttp==3.9.1
 # Monitoring & Logging
 prometheus-client==0.19.0
 sentry-sdk==1.39.2
+sentry-sdk[fastapi]
 
 # Date & Time
 python-dateutil==2.8.2
@@ -56,6 +57,8 @@ mypy==1.8.0
 pre-commit==3.6.0
 
 email-validator
+requests>=2.31
+
 # Optional: Elasticsearch
 # elasticsearch==8.11.1
 

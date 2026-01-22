@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+import math
 
 from app.database import get_db
 from app.models.api_key import APIKey
@@ -12,8 +13,12 @@ from app.schemas.metrics import (
     OverviewMetrics,
     TopEventsMetric,
     ActiveUsersMetric,
-    TimeSeriesMetric
+    TimeSeriesMetric,
+    MetricDataPoint,
+    CursorPaginatedResponse,
+    PaginatedResponse
 )
+from app.schemas.ingest import EventResponse
 
 router = APIRouter()
 
@@ -210,4 +215,141 @@ async def get_time_series(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve time series: {str(e)}"
+        )
+        
+@router.get("/time-series/{metric_name}/paginated")
+async def get_time_series_paginated(
+    metric_name: str,
+    start_time: Optional[datetime] = Query(None),
+    end_time: Optional[datetime] = Query(None),
+    cursor: Optional[str] = Query(None, description="Pagination cursor"),
+    limit: int = Query(default=100, ge=1, le=1000),
+    api_key: APIKey = Depends(get_api_key),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get time-series data with cursor-based pagination.
+    
+    **Cursor-based pagination** is better for time-series data as it:
+    - Handles real-time updates correctly
+    - Doesn't skip or duplicate data
+    - More efficient for large datasets
+    
+    **Usage**:
+    1. First request: Don't provide cursor
+    2. Subsequent requests: Use `next_cursor` from previous response
+    
+    **Example**:
+```
+    GET /metrics/time-series/events_per_minute/paginated?limit=100
+    # Response includes next_cursor
+    GET /metrics/time-series/events_per_minute/paginated?cursor=ABC123&limit=100
+```
+    """
+    service = MetricsService(db)
+    
+    # Default time range
+    if end_time is None:
+        end_time = datetime.now(timezone.utc)
+    if start_time is None:
+        start_time = end_time - timedelta(hours=1)
+    
+    try:
+        data_points, next_cursor, has_next = await service.get_time_series_paginated(
+            client_id=str(api_key.id),
+            metric_name=metric_name,
+            start_time=start_time,
+            end_time=end_time,
+            cursor=cursor,
+            limit=limit
+        )
+        
+        return CursorPaginatedResponse(
+            items=[MetricDataPoint(**dp) for dp in data_points],
+            next_cursor=next_cursor,
+            has_next=has_next,
+            count=len(data_points)
+        )
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve time series: {str(e)}"
+        )
+
+
+@router.get("/events", response_model=PaginatedResponse[EventResponse])
+async def get_events(
+    start_time: Optional[datetime] = Query(None),
+    end_time: Optional[datetime] = Query(None),
+    event_name: Optional[str] = Query(None),
+    user_id: Optional[str] = Query(None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=100, ge=1, le=1000),
+    api_key: APIKey = Depends(get_api_key),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get raw events with pagination.
+    
+    **Filters**:
+    - `start_time`, `end_time`: Time range
+    - `event_name`: Filter by event type
+    - `user_id`: Filter by user
+    
+    **Pagination**:
+    - `page`: Page number (1-indexed)
+    - `page_size`: Items per page (max 1000)
+    
+    **Example**:
+```
+    GET /metrics/events?event_name=page_view&page=1&page_size=50
+```
+    """
+    service = MetricsService(db)
+    
+    # Default time range
+    if end_time is None:
+        end_time = datetime.now(timezone.utc)
+    if start_time is None:
+        start_time = end_time - timedelta(hours=24)
+    
+    try:
+        events, total = await service.get_events_paginated(
+            client_id=str(api_key.id),
+            start_time=start_time,
+            end_time=end_time,
+            event_name=event_name,
+            user_id=user_id,
+            page=page,
+            page_size=page_size
+        )
+        
+        total_pages = math.ceil(total / page_size) if total > 0 else 0
+        
+        return PaginatedResponse(
+            items=[
+                EventResponse(
+                    id=e.id,
+                    client_id=str(e.client_id),
+                    user_id=e.user_id,
+                    event_name=e.event_name,
+                    properties=e.properties,
+                    event_time=e.event_time,
+                    received_at=e.received_at
+                )
+                for e in events
+            ],
+            total=total,
+            page=page,
+            page_size=page_size,
+            total_pages=total_pages,
+            has_next=page < total_pages,
+            has_prev=page > 1
+        )
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve events: {str(e)}"
         )

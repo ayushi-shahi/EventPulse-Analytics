@@ -49,56 +49,29 @@ async def websocket_live_feed(
     token: str = Query(..., description="API key for authentication"),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    WebSocket endpoint for real-time event feed.
-    
-    **Connection URL**: ws://localhost:8000/api/v1/ws/live/{client_id}?token=your_api_key
-    
-    **Authentication**: Pass API key as query parameter `token`
-    
-    **Message Types from Server**:
-    - `event`: New event data
-    - `metric`: Metric update
-    - `alert`: Alert notification
-    - `pong`: Response to ping
-    
-    **Message Types from Client**:
-    - `ping`: Keep-alive check
-    - `subscribe`: {"type": "subscribe", "channels": ["events", "metrics"]}
-    - `unsubscribe`: {"type": "unsubscribe", "channels": ["alerts"]}
-    - `get_stats`: Request connection statistics
-    
-    **Example Client Code (JavaScript)**:
-```javascript
-    const ws = new WebSocket('ws://localhost:8000/api/v1/ws/live/YOUR_CLIENT_ID?token=YOUR_API_KEY');
-    
-    ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        console.log('Received:', data);
-    };
-    
-    // Send ping
-    ws.send(JSON.stringify({type: 'ping', timestamp: Date.now()}));
-```
-    """
+    """WebSocket endpoint with connection limit"""
     connection_id = str(uuid.uuid4())
     
     try:
         # Authenticate
         api_key = await get_api_key_from_token(token, db)
         
-        # Verify client_id matches API key
         if str(api_key.id) != client_id:
             await websocket.close(code=1008, reason="Client ID mismatch")
             return
         
-        # Connect
-        await manager.connect(
+        # Connect (with rate limit check)
+        connected = await manager.connect(
             websocket, 
             client_id, 
             connection_id,
             user_info={"api_key_name": api_key.client_name}
         )
+        
+        if not connected:
+            # Connection rejected (limit reached)
+            return
+        
         
         # Send welcome message
         await manager.send_personal_message(
