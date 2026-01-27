@@ -9,37 +9,9 @@ export const AuthProvider = ({ children }) => {
   const [error, setError] = useState(null);
 
   /**
-   * Check if user is authenticated on mount
+   * Fetch current user from API
    */
-  const checkAuth = useCallback(async () => {
-    const token = apiClient.getToken();
-    
-    if (!token) {
-      setLoading(false);
-      return;
-    }
-
-    // Check if token is expired
-    if (apiClient.isTokenExpired()) {
-      const refreshToken = apiClient.getRefreshToken();
-      if (refreshToken) {
-        try {
-          await apiClient.refreshToken(refreshToken);
-        } catch (err) {
-          console.error('Token refresh failed:', err);
-          apiClient.removeToken();
-          setUser(null);
-          setLoading(false);
-          return;
-        }
-      } else {
-        apiClient.removeToken();
-        setUser(null);
-        setLoading(false);
-        return;
-      }
-    }
-
+  const fetchUser = useCallback(async () => {
     try {
       const userData = await apiClient.getCurrentUser();
       setUser(userData);
@@ -57,8 +29,13 @@ export const AuthProvider = ({ children }) => {
    * Initialize auth state on mount
    */
   useEffect(() => {
-    checkAuth();
-  }, [checkAuth]);
+    const token = apiClient.getToken();
+    if (token) {
+      fetchUser();
+    } else {
+      setLoading(false);
+    }
+  }, [fetchUser]);
 
   /**
    * Login user
@@ -67,11 +44,7 @@ export const AuthProvider = ({ children }) => {
     setError(null);
     try {
       const data = await apiClient.login(email, password);
-      
-      // Fetch user data after successful login
-      const userData = await apiClient.getCurrentUser();
-      setUser(userData);
-      
+      await fetchUser();
       return data;
     } catch (err) {
       setError(err.message);
@@ -85,18 +58,9 @@ export const AuthProvider = ({ children }) => {
   const register = async (email, password) => {
     setError(null);
     try {
-      const data = await apiClient.register(email, password);
-      
-      // If registration returns tokens, fetch user data
-      if (data.access_token) {
-        const userData = await apiClient.getCurrentUser();
-        setUser(userData);
-      } else {
-        // Otherwise, auto-login after registration
-        await login(email, password);
-      }
-      
-      return data;
+      await apiClient.register(email, password);
+      // Auto-login after registration
+      return await login(email, password);
     } catch (err) {
       setError(err.message);
       throw err;
@@ -119,13 +83,6 @@ export const AuthProvider = ({ children }) => {
     setUser(userData);
   }, []);
 
-  /**
-   * Clear error
-   */
-  const clearError = useCallback(() => {
-    setError(null);
-  }, []);
-
   const value = {
     user,
     loading,
@@ -134,9 +91,7 @@ export const AuthProvider = ({ children }) => {
     register,
     logout,
     updateUser,
-    clearError,
-    checkAuth,
-    isAuthenticated: !!user, // This is the key addition
+    isAuthenticated: !!user,
   };
 
   return (
@@ -147,3 +102,4 @@ export const AuthProvider = ({ children }) => {
 };
 
 export default AuthContext;
+

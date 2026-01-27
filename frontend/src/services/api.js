@@ -13,14 +13,7 @@ class APIClient {
    * Get auth token from localStorage
    */
   getToken() {
-    return localStorage.getItem('access_token'); // Changed from 'token' to 'access_token'
-  }
-
-  /**
-   * Get refresh token from localStorage
-   */
-  getRefreshToken() {
-    return localStorage.getItem('refresh_token');
+    return localStorage.getItem('token');
   }
 
   /**
@@ -31,46 +24,17 @@ class APIClient {
   }
 
   /**
-   * Set auth tokens
-   */
-  setTokens(accessToken, refreshToken) {
-    localStorage.setItem('access_token', accessToken);
-    if (refreshToken) {
-      localStorage.setItem('refresh_token', refreshToken);
-    }
-  }
-
-  /**
-   * Set auth token (backward compatibility)
+   * Set auth token
    */
   setToken(token) {
-    localStorage.setItem('access_token', token);
+    localStorage.setItem('token', token);
   }
 
   /**
-   * Remove auth tokens
+   * Remove auth token
    */
   removeToken() {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('token'); // Remove old token if exists
-  }
-
-  /**
-   * Check if token is expired
-   */
-  isTokenExpired() {
-    const token = this.getToken();
-    if (!token) return true;
-
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      const exp = payload.exp * 1000; // Convert to milliseconds
-      return Date.now() >= exp;
-    } catch (error) {
-      console.error('Error checking token expiration:', error);
-      return true;
-    }
+    localStorage.removeItem('token');
   }
 
   /**
@@ -97,7 +61,7 @@ class APIClient {
   }
 
   /**
-   * Make HTTP request with automatic token refresh
+   * Make HTTP request
    */
   async request(endpoint, options = {}) {
     const { 
@@ -106,27 +70,7 @@ class APIClient {
       headers = {}, 
       useAPIKey = false,
       signal = null,
-      skipAuthRefresh = false, // Skip refresh for auth endpoints
     } = options;
-
-    // Check if token is expired and refresh if needed (except for auth endpoints)
-    if (!useAPIKey && !skipAuthRefresh && this.isTokenExpired()) {
-      const refreshToken = this.getRefreshToken();
-      if (refreshToken) {
-        try {
-          await this.refreshToken(refreshToken);
-        } catch (error) {
-          console.error('Token refresh failed:', error);
-          this.removeToken();
-          window.location.href = '/login';
-          throw new Error('Session expired. Please login again.');
-        }
-      } else {
-        this.removeToken();
-        window.location.href = '/login';
-        throw new Error('Session expired. Please login again.');
-      }
-    }
 
     const url = `${this.baseURL}${endpoint}`;
     const defaultHeaders = this.getHeaders(useAPIKey);
@@ -154,20 +98,6 @@ class APIClient {
 
       // Handle 401 Unauthorized
       if (response.status === 401) {
-        // Try to refresh token once
-        if (!skipAuthRefresh && !useAPIKey) {
-          const refreshToken = this.getRefreshToken();
-          if (refreshToken) {
-            try {
-              await this.refreshToken(refreshToken);
-              // Retry the original request
-              return this.request(endpoint, { ...options, skipAuthRefresh: true });
-            } catch (error) {
-              console.error('Token refresh failed:', error);
-            }
-          }
-        }
-        
         this.removeToken();
         window.location.href = '/login';
         throw new Error('Session expired. Please login again.');
@@ -199,30 +129,18 @@ class APIClient {
   // ==================== AUTH ====================
 
   async register(email, password) {
-    const data = await this.request('/auth/register', {
+    return this.request('/auth/register', {
       method: 'POST',
       body: { email, password, role: 'user' },
-      skipAuthRefresh: true,
     });
-    
-    // Store tokens if registration returns them
-    if (data.access_token) {
-      this.setTokens(data.access_token, data.refresh_token);
-    }
-    
-    return data;
   }
 
   async login(email, password) {
     const data = await this.request('/auth/login', {
       method: 'POST',
       body: { email, password },
-      skipAuthRefresh: true,
     });
-    
-    // Store both access and refresh tokens
-    this.setTokens(data.access_token, data.refresh_token);
-    
+    this.setToken(data.access_token);
     return data;
   }
 
@@ -230,12 +148,8 @@ class APIClient {
     const data = await this.request('/auth/refresh', {
       method: 'POST',
       body: { refresh_token: refreshToken },
-      skipAuthRefresh: true,
     });
-    
-    // Update access token
-    this.setTokens(data.access_token, data.refresh_token || refreshToken);
-    
+    this.setToken(data.access_token);
     return data;
   }
 

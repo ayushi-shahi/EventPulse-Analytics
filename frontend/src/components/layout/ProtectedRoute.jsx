@@ -8,19 +8,16 @@ import Spinner from '../common/Spinner';
  * Redirects to login if user is not authenticated
  */
 const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
+  const { user, loading } = useAuth();
 
-  // Show loading spinner while checking authentication
   if (loading) {
     return <Spinner fullScreen message="Loading..." />;
   }
 
-  // Redirect to login if not authenticated
-  if (!isAuthenticated) {
+  if (!user) {
     return <Navigate to="/login" replace />;
   }
 
-  // Render protected content
   return children;
 };
 
