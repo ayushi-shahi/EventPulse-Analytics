@@ -53,7 +53,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://eventpulse.onrender.com",
+        "https://eventpulse-frontend.onrender.com",
         "http://localhost:3000",  
     ],
     allow_credentials=True,
