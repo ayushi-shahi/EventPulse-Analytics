@@ -282,29 +282,28 @@ const Alerts = () => {
 
   if (!hasSelectedKey) {
     return (
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <EmptyState
           icon={Bell}
           title="No API Key Selected"
           description="Please select an API key to manage alerts."
           actionLabel="Go to API Keys"
-          onAction={() => window.location.href = '/api-keys'}
+          onAction={() => (window.location.href = '/api-keys')}
         />
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-8 -mt-72">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Alerts</h1>
           <p className="text-gray-600 mt-1">
             Configure and manage alerts for {selectedAPIKey?.client_name}
           </p>
         </div>
-
         <Button
           variant="primary"
           icon={Plus}
@@ -336,12 +335,11 @@ const Alerts = () => {
           />
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-6">
+        <div className="grid grid-cols-1 gap-4 md:gap-6">
           {alerts.map((alert) => {
             const severityConfig = SEVERITY_COLORS[alert.severity];
-            
             return (
-              <Card key={alert.id} hover>
+              <Card key={alert.id} hover className="shadow-sm">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
@@ -365,7 +363,7 @@ const Alerts = () => {
                       </p>
                     )}
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
                       <div>
                         <p className="text-gray-500 font-medium">Condition</p>
                         <p className="text-gray-900">

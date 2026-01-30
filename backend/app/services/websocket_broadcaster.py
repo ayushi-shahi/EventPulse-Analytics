@@ -80,7 +80,7 @@ class WebSocketBroadcaster:
 
         # IMPORTANT: recreate pubsub and re-subscribe
         self.pubsub = self.redis_client.pubsub(ignore_subscribe_messages=True)
-        await self.pubsub.psubscribe("events:*", "metrics:*", "alerts:*")
+        await self.pubsub.psubscribe("events:*", "metrics:*", "alerts:*", "rate_limit:*")
 
         self.reconnect_delay = 1
         logger.info("✅ Redis reconnected and resubscribed")
@@ -136,12 +136,32 @@ class WebSocketBroadcaster:
         except Exception as e:
             logger.error(f"Failed to publish alert: {e}", exc_info=True)
 
+    async def publish_rate_limit_exceeded(
+        self, client_id: str, limit: int, reset_at: float = None
+    ):
+        """Notify WebSocket clients that API key rate limit was exceeded."""
+        try:
+            if self.redis_client is None:
+                await self.initialize()
+            await self.redis_client.publish(
+                f"rate_limit:{client_id}",
+                json.dumps(
+                    {
+                        "client_id": client_id,
+                        "limit": limit,
+                        "reset_at": reset_at,
+                    }
+                ),
+            )
+        except Exception as e:
+            logger.error(f"Failed to publish rate_limit_exceeded: {e}", exc_info=True)
+
     # -------------------- SUBSCRIBE & BROADCAST --------------------
 
     async def subscribe_and_broadcast(self):
         """Main broadcaster loop."""
         await self.initialize()
-        await self.pubsub.psubscribe("events:*", "metrics:*", "alerts:*")
+        await self.pubsub.psubscribe("events:*", "metrics:*", "alerts:*", "rate_limit:*")
 
         logger.info("✅ WebSocket broadcaster listening to Redis")
         self.running = True
@@ -235,6 +255,17 @@ class WebSocketBroadcaster:
                     },
                     client_id,
                     channel="alerts",
+                )
+
+            elif channel.startswith("rate_limit:"):
+                await manager.broadcast_to_client(
+                    {
+                        "type": "rate_limit_exceeded",
+                        "limit": payload.get("limit"),
+                        "reset_at": payload.get("reset_at"),
+                    },
+                    client_id,
+                    channel="events",
                 )
 
         except json.JSONDecodeError:

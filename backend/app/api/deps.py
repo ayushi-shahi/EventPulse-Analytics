@@ -1,4 +1,5 @@
 # backend/app/api/deps.py (update)
+import asyncio
 from fastapi import Depends, HTTPException, status, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -8,6 +9,7 @@ from app.database import get_db
 from app.models.api_key import APIKey
 from app.core.security import verify_api_key
 from app.core.rate_limiter import rate_limiter
+from app.services.websocket_broadcaster import broadcaster
 
 
 async def get_api_key(
@@ -85,13 +87,24 @@ async def check_rate_limit(
     request.state.rate_limit_info = info
     
     if not is_allowed:
+        # Notify WebSocket clients (e.g. Live Feed) so they can show banner and stop
+        try:
+            asyncio.create_task(
+                broadcaster.publish_rate_limit_exceeded(
+                    client_id=str(api_key.id),
+                    limit=info["limit"],
+                    reset_at=info.get("reset_at"),
+                )
+            )
+        except Exception:
+            pass
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=f"Rate limit exceeded. Limit: {info['limit']} requests per minute",
             headers={
-                "X-RateLimit-Limit": str(info['limit']),
+                "X-RateLimit-Limit": str(info["limit"]),
                 "X-RateLimit-Remaining": "0",
-                "X-RateLimit-Reset": str(info['reset_at']),
+                "X-RateLimit-Reset": str(info["reset_at"]),
                 "Retry-After": "60"
             }
         )

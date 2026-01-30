@@ -4,7 +4,7 @@ import time
 import random
 from datetime import datetime
 
-API_KEY = "ep_live_7526cc263f58ec8856cc9762f1f098ac5adcba8f78fbb140b56fed2d6984d65c"
+API_KEY = ""
 BASE_URL = "http://127.0.0.1:8000/api/v1"
 
 headers = {
@@ -63,7 +63,7 @@ if __name__ == "__main__":
                 if event_count % 10 == 0:
                     print(f"\n📊 Sent {event_count} events so far\n")
             
-            time.sleep(0.1)  # 2 seconds between events
+            time.sleep(2)  # 2 seconds between events
     
     except KeyboardInterrupt:
         print(f"\n\n👋 Stopped. Total events sent: {event_count}")

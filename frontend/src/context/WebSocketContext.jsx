@@ -3,29 +3,30 @@ import { API_CONFIG } from '../config';
 
 export const WebSocketContext = createContext(null);
 
+const MAX_EVENTS_STORED = 10000;
+
 export const WebSocketProvider = ({ children }) => {
   const [isConnected, setIsConnected] = useState(false);
   const [events, setEvents] = useState([]);
+  const [totalEventsCount, setTotalEventsCount] = useState(0);
   const [metrics, setMetrics] = useState([]);
-  const [alerts, setAlerts] = useState([]);
+  const [currentAlert, setCurrentAlert] = useState(null); // Single current alert
   const [connectionError, setConnectionError] = useState(null);
-  
+  const [rateLimitExceeded, setRateLimitExceeded] = useState(false);
+
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
   const reconnectAttemptsRef = useRef(0);
+  const alertTimeoutRef = useRef(null);
   const maxReconnectAttempts = 5;
   const reconnectDelay = 3000;
 
-  /**
-   * Connect to WebSocket
-   */
   const connect = useCallback((clientId, apiKey) => {
     if (!clientId || !apiKey) {
       console.warn('Cannot connect WebSocket: missing clientId or apiKey');
       return;
     }
 
-    // Close existing connection
     disconnect();
 
     try {
@@ -39,6 +40,7 @@ export const WebSocketProvider = ({ children }) => {
         console.log('✅ WebSocket connected');
         setIsConnected(true);
         setConnectionError(null);
+        setRateLimitExceeded(false);
         reconnectAttemptsRef.current = 0;
       };
 
@@ -61,7 +63,11 @@ export const WebSocketProvider = ({ children }) => {
         setIsConnected(false);
         wsRef.current = null;
 
-        // Attempt to reconnect
+        // Don't reconnect if rate limited
+        if (rateLimitExceeded) {
+          return;
+        }
+
         if (reconnectAttemptsRef.current < maxReconnectAttempts) {
           reconnectAttemptsRef.current += 1;
           console.log(`Reconnecting... (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`);
@@ -78,11 +84,8 @@ export const WebSocketProvider = ({ children }) => {
       console.error('Failed to create WebSocket:', err);
       setConnectionError(err.message);
     }
-  }, []);
+  }, [rateLimitExceeded]);
 
-  /**
-   * Disconnect from WebSocket
-   */
   const disconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
@@ -98,9 +101,6 @@ export const WebSocketProvider = ({ children }) => {
     reconnectAttemptsRef.current = 0;
   }, []);
 
-  /**
-   * Handle incoming WebSocket messages
-   */
   const handleMessage = useCallback((data) => {
     const { type } = data;
 
@@ -110,38 +110,66 @@ export const WebSocketProvider = ({ children }) => {
         break;
 
       case 'event':
-        setEvents((prev) => {
-          const newEvents = [data, ...prev].slice(0, 1000); // Keep last 1000
-          return newEvents;
-        });
+        // Don't add events if rate limited
+        if (!rateLimitExceeded) {
+          setTotalEventsCount((c) => c + 1);
+          setEvents((prev) => [data, ...prev].slice(0, MAX_EVENTS_STORED));
+        }
         break;
 
       case 'metric':
-        setMetrics((prev) => {
-          const newMetrics = [data, ...prev].slice(0, 100); // Keep last 100
-          return newMetrics;
-        });
+        setMetrics((prev) => [data, ...prev].slice(0, 100));
         break;
 
       case 'alert':
-        setAlerts((prev) => {
-          const newAlerts = [data, ...prev].slice(0, 50); // Keep last 50
-          return newAlerts;
+        // Show only the latest alert immediately
+        // Clear any previous alert timeout
+        if (alertTimeoutRef.current) {
+          clearTimeout(alertTimeoutRef.current);
+        }
+        
+        // Set current alert
+        setCurrentAlert({
+          ...data,
+          id: Date.now(),
+          timestamp: new Date().toISOString(),
         });
+        
+        // Auto-dismiss after 10 seconds
+        alertTimeoutRef.current = setTimeout(() => {
+          setCurrentAlert(null);
+        }, 10000);
+        break;
+
+      case 'rate_limit_exceeded':
+      case 'error':
+        if (data.message?.toLowerCase().includes('rate limit') || 
+            data.message?.toLowerCase().includes('too many requests') ||
+            type === 'rate_limit_exceeded') {
+          console.log('🚫 Rate limit exceeded - stopping event stream');
+          setRateLimitExceeded(true);
+          
+          // Immediately disconnect
+          if (wsRef.current) {
+            try {
+              wsRef.current.close();
+            } catch (e) {
+              console.error('Error closing WebSocket:', e);
+            }
+            wsRef.current = null;
+          }
+          setIsConnected(false);
+        }
         break;
 
       case 'pong':
-        // Heartbeat response
         break;
 
       default:
         console.log('Unknown WebSocket message type:', type, data);
     }
-  }, []);
+  }, [rateLimitExceeded]);
 
-  /**
-   * Send message through WebSocket
-   */
   const sendMessage = useCallback((message) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(message));
@@ -150,46 +178,40 @@ export const WebSocketProvider = ({ children }) => {
     }
   }, []);
 
-  /**
-   * Send ping to keep connection alive
-   */
   const sendPing = useCallback(() => {
     sendMessage({ type: 'ping', timestamp: new Date().toISOString() });
   }, [sendMessage]);
 
-  /**
-   * Clear events
-   */
   const clearEvents = useCallback(() => {
     setEvents([]);
+    setTotalEventsCount(0);
   }, []);
 
-  /**
-   * Clear metrics
-   */
   const clearMetrics = useCallback(() => {
     setMetrics([]);
   }, []);
 
-  /**
-   * Clear alerts
-   */
-  const clearAlerts = useCallback(() => {
-    setAlerts([]);
+  const dismissAlert = useCallback(() => {
+    if (alertTimeoutRef.current) {
+      clearTimeout(alertTimeoutRef.current);
+      alertTimeoutRef.current = null;
+    }
+    setCurrentAlert(null);
   }, []);
 
-  /**
-   * Cleanup on unmount
-   */
+  const resetRateLimit = useCallback(() => {
+    setRateLimitExceeded(false);
+  }, []);
+
   useEffect(() => {
     return () => {
       disconnect();
+      if (alertTimeoutRef.current) {
+        clearTimeout(alertTimeoutRef.current);
+      }
     };
   }, [disconnect]);
 
-  /**
-   * Heartbeat ping every 30 seconds
-   */
   useEffect(() => {
     if (!isConnected) return;
 
@@ -204,14 +226,18 @@ export const WebSocketProvider = ({ children }) => {
     isConnected,
     connectionError,
     events,
+    totalEventsCount,
     metrics,
-    alerts,
+    currentAlert,
+    rateLimitExceeded,
+    setRateLimitExceeded,
     connect,
     disconnect,
     sendMessage,
     clearEvents,
     clearMetrics,
-    clearAlerts,
+    dismissAlert,
+    resetRateLimit,
   };
 
   return (

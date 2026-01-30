@@ -19,7 +19,7 @@ class APIClient {
   /**
    * Get API key from localStorage
    */
-  getAPIKey() {
+  getSelectedAPIKey() {
     return localStorage.getItem('selected_api_key');
   }
 
@@ -46,7 +46,7 @@ class APIClient {
     };
 
     if (useAPIKey) {
-      const apiKey = this.getAPIKey();
+      const apiKey = this.getSelectedAPIKey();
       if (apiKey) {
         headers['X-API-Key'] = apiKey;
       }
@@ -96,32 +96,77 @@ class APIClient {
 
       clearTimeout(timeoutId);
 
-      // Handle 401 Unauthorized
-      if (response.status === 401) {
-        this.removeToken();
-        window.location.href = '/login';
-        throw new Error('Session expired. Please login again.');
-      }
-
-      // Parse response
+      // Parse response body safely (handle empty/204)
       const contentType = response.headers.get('content-type');
+      const contentLength = response.headers.get('content-length');
       let data;
 
-      if (contentType && contentType.includes('application/json')) {
-        data = await response.json();
+      const hasBody =
+        response.status !== 204 &&
+        response.status !== 205 &&
+        method !== 'HEAD' &&
+        contentLength !== '0';
+
+      if (hasBody) {
+        if (contentType && contentType.includes('application/json')) {
+          try {
+            data = await response.json();
+          } catch (e) {
+            // If body is empty or invalid JSON, fall back gracefully
+            data = null;
+          }
+        } else {
+          data = await response.text();
+        }
       } else {
-        data = await response.text();
+        data = null;
+      }
+
+      // Handle 401 Unauthorized – let callers decide what to do
+      if (response.status === 401) {
+        const message = (data && (data.detail || data.message)) || 'Unauthorized';
+        const error = new Error(message);
+        error.status = 401;
+        // Flag API key–related auth errors so callers can react
+        if (typeof message === 'string' && message.toLowerCase().includes('api key')) {
+          error.isAPIKeyError = true;
+        }
+        throw error;
       }
 
       if (!response.ok) {
-        throw new Error(data.detail || data.message || 'Request failed');
+        const message = (data && (data.detail || data.message)) || 'Request failed';
+        const error = new Error(message);
+        error.status = response.status;
+        if (typeof message === 'string' && message.toLowerCase().includes('api key')) {
+          error.isAPIKeyError = true;
+        }
+        if (response.status === 429) {
+          error.isRateLimitExceeded = true;
+        }
+        throw error;
       }
 
       return data;
     } catch (error) {
+      // Handle network errors (connection reset, etc.)
       if (error.name === 'AbortError') {
-        throw new Error('Request timeout');
+        const abortError = new Error('Request timeout');
+        abortError.code = 'TIMEOUT';
+        throw abortError;
       }
+      
+      if (error.message && (
+        error.message.includes('ECONNRESET') ||
+        error.message.includes('Failed to fetch') ||
+        error.message.includes('NetworkError') ||
+        error.message.toLowerCase().includes('network')))
+      {
+        const netError = new Error('Network error. Please check your connection and try again.');
+        netError.code = 'NETWORK_ERROR';
+        throw netError;
+      }
+      
       throw error;
     }
   }
@@ -174,7 +219,10 @@ class APIClient {
     return this.request('/api-keys/');
   }
 
-  async getAPIKey(keyId) {
+  async getAPIKeyDetails(keyId) {
+    if (!keyId) {
+      throw new Error('API key id is required');
+    }
     return this.request(`/api-keys/${keyId}`);
   }
 

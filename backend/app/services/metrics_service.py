@@ -248,8 +248,32 @@ class MetricsService:
         await self.db.commit()
 
     # =====================================================
-    # CURSOR-BASED PAGINATION (TIME SERIES)
+    # TIME SERIES (AGGREGATES)
     # =====================================================
+
+    async def get_time_series(
+        self,
+        client_id: str,
+        metric_name: str,
+        start_time: datetime,
+        end_time: datetime,
+        limit: int = 1000,
+    ) -> List[Dict[str, Any]]:
+        """
+        Return a simple list of time-series data points for a metric.
+
+        This is a thin wrapper over the cursor-based implementation, used by
+        the non-paginated `/metrics/time-series/{metric_name}` endpoint.
+        """
+        data_points, _next_cursor, _has_next = await self.get_time_series_paginated(
+            client_id=client_id,
+            metric_name=metric_name,
+            start_time=start_time,
+            end_time=end_time,
+            cursor=None,
+            limit=limit,
+        )
+        return data_points
 
     async def get_time_series_paginated(
         self,

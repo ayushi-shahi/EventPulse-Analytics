@@ -69,7 +69,7 @@ const Sidebar = ({ isOpen, onClose }) => {
         {/* Mobile Header */}
         <div className="lg:hidden flex items-center justify-between p-4 border-b border-gray-200">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
               <span className="text-white font-bold text-sm">EP</span>
             </div>
             <h2 className="text-lg font-bold text-gray-900">EventPulse</h2>
@@ -109,10 +109,10 @@ const Sidebar = ({ isOpen, onClose }) => {
         </nav>
 
         {/* Footer */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200">
+        <div className="absolute -bottom-10 left-0 right-0 p-4 border-t border-gray-200">
           <div className="text-xs text-gray-500 text-center">
-            <p>EventPulse Analytics v1.0.0</p>
-            <p className="mt-1">© 2024 All rights reserved</p>
+            <p>EventPulse Analytics</p>
+            <p className="mt-1">© 2026 All rights reserved</p>
           </div>
         </div>
       </aside>

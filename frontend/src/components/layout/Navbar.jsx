@@ -35,11 +35,11 @@ const Navbar = ({ onMenuClick }) => {
 
           {/* Logo */}
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
               <span className="text-white font-bold text-sm">EP</span>
             </div>
             <div className="hidden sm:block">
-              <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              <h1 className="text-xl font-bold text-gray-900">
                 EventPulse
               </h1>
               <p className="text-xs text-gray-500">Analytics Platform</p>
@@ -55,7 +55,7 @@ const Navbar = ({ onMenuClick }) => {
               <div className="text-sm">
                 <p className="font-medium text-blue-900">{selectedAPIKey.client_name}</p>
                 <p className="text-xs text-blue-600 font-mono">
-                  {formatAPIKey(selectedAPIKey.key)}
+                  {formatAPIKey(selectedAPIKey.api_key || selectedAPIKey.key)}
                 </p>
               </div>
             </div>
@@ -78,7 +78,7 @@ const Navbar = ({ onMenuClick }) => {
               onClick={() => setShowUserMenu(!showUserMenu)}
               className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-100 transition-colors"
             >
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
+              <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
                 <span className="text-white text-sm font-semibold">
                   {getInitials(user?.email)}
                 </span>
