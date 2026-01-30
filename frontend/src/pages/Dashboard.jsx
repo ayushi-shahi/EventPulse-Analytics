@@ -86,7 +86,7 @@ const Dashboard = () => {
 
   if (!hasSelectedKey) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-8">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-8 -mt-72">
         <EmptyState
           icon={BarChart2}
           title="No API Key Selected"
@@ -100,7 +100,7 @@ const Dashboard = () => {
 
   if (apiKeyError) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-8">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-8 -mt-72">
         <div className="max-w-2xl w-full bg-red-50 border-2 border-red-200 rounded-2xl p-8 shadow-lg">
           <div className="flex items-start gap-4">
             <div className="flex-shrink-0 w-12 h-12 bg-red-500 rounded-xl flex items-center justify-center">
