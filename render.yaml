@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: eventpulse-backend
+    env: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    autoDeploy: true
+    healthCheckPath: /api/v1/health/live
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DEBUG
+        value: false
