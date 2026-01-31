@@ -1,7 +1,6 @@
 # backend/app/config.py
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from datetime import timedelta
-
 
 class Settings(BaseSettings):
     # ----------------------------
@@ -15,22 +14,16 @@ class Settings(BaseSettings):
     # ----------------------------
     # Database
     # ----------------------------
-    DATABASE_URL: str                   # async URL (postgresql+asyncpg)
-    DATABASE_URL_SYNC: str | None = None   # <-- ADD THIS
+    DATABASE_URL: str                    # async URL (postgresql+asyncpg)
+    DATABASE_URL_SYNC: str | None = None
     DB_ECHO: bool = False
 
     # ----------------------------
-    # Redis (Caching & Celery)
+    # Redis / Celery
     # ----------------------------
     REDIS_URL: str
     CELERY_BROKER_URL: str | None = None
     CELERY_RESULT_BACKEND: str | None = None
-
-    # ----------------------------
-    # WebSockets (optional)
-    # ----------------------------
-    WS_HOST: str | None = None
-    WS_PORT: int | None = None
 
     # ----------------------------
     # App Config
@@ -39,15 +32,9 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     LOG_LEVEL: str = "INFO"
     TIMEZONE: str = "UTC"
-    
-    # Monitoring & Observability
-    # ----------------------------
-    SENTRY_DSN: str | None = None
-    SENTRY_ENVIRONMENT: str | None = None
-    SENTRY_TRACES_SAMPLE_RATE: float = 0.1  # 10% of transactions
 
     # ----------------------------
-    # Email / Notifications
+    # Email (optional)
     # ----------------------------
     SMTP_HOST: str | None = None
     SMTP_PORT: int | None = None
@@ -56,14 +43,13 @@ class Settings(BaseSettings):
     SMTP_FROM: str | None = None
 
     # ----------------------------
-    # Optional Analytics / ML / Extra Features
+    # ✅ Pydantic v2 config
     # ----------------------------
-    ELASTICSEARCH_URL: str | None = None
-    ML_MODEL_PATH: str | None = None
-
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="allow"   # 🔥 THIS FIXES YOUR ERROR
+    )
 
     @property
     def access_token_expire(self) -> timedelta:

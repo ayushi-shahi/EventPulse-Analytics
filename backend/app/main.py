@@ -56,7 +56,10 @@ app.add_middleware(
     #     "https://eventpulse-frontend.onrender.com",
     #     "http://localhost:3000",
     # ],
-    allow_origins=["*"],
+   allow_origins=[
+        "http://localhost:3000",
+        "https://eventpulse-frontend.onrender.com",
+    ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=[
