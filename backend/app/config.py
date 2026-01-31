@@ -42,6 +42,12 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str | None = None
     SMTP_FROM: str | None = None
 
+    
+    SENTRY_DSN: str | None = None
+    SENTRY_ENVIRONMENT: str | None = None
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.0
+    
+    
     # ----------------------------
     # ✅ Pydantic v2 config
     # ----------------------------
