@@ -24,7 +24,7 @@ logger = get_logger(__name__)
 # -----------------------
 # Sentry
 # -----------------------
-if settings.SENTRY_DSN:
+if getattr(settings, "SENTRY_DSN", None):
     sentry_sdk.init(
         dsn=settings.SENTRY_DSN,
         environment=settings.SENTRY_ENVIRONMENT or settings.APP_ENV,
