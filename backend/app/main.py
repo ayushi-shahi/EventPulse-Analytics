@@ -3,21 +3,14 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-
 import asyncio
 import time
 import sentry_sdk
-
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 
 from app.config import settings
-from app.database import engine
-from app.models.api_key import APIKey
-
 from app.api.v1 import auth, api_keys, ingest, metrics, alerts, admin, websockets, health
 from app.core.rate_limiter import rate_limiter
 from app.services.websocket_broadcaster import broadcaster
@@ -30,28 +23,23 @@ setup_logging()
 logger = get_logger(__name__)
 
 # -----------------------
-# API Key Cache (GLOBAL)
-# -----------------------
-API_KEY_CACHE: set[str] = set()
-
-# -----------------------
-# Sentry (safe)
+# Sentry
 # -----------------------
 if getattr(settings, "SENTRY_DSN", None):
     sentry_sdk.init(
         dsn=settings.SENTRY_DSN,
-        environment=getattr(settings, "SENTRY_ENVIRONMENT", settings.APP_ENV),
-        traces_sample_rate=getattr(settings, "SENTRY_TRACES_SAMPLE_RATE", 0.0),
+        environment=settings.SENTRY_ENVIRONMENT or settings.APP_ENV,
+        traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
         integrations=[
             FastApiIntegration(),
             SqlalchemyIntegration(),
         ],
         send_default_pii=False,
     )
-    logger.info("Sentry initialized")
+    logger.info(f"Sentry initialized for environment: {settings.APP_ENV}")
 
 # -----------------------
-# FastAPI App
+# FastAPI app
 # -----------------------
 app = FastAPI(
     title="EventPulse API",
@@ -61,12 +49,12 @@ app = FastAPI(
 )
 
 # -----------------------
-# CORS (ALLOW ALL for ingestion)
+# CORS
 # -----------------------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=False,  # MUST be False with "*"
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -77,26 +65,42 @@ app.add_middleware(
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start_time = time.time()
-    response = await call_next(request)
-    duration = time.time() - start_time
+    logger.info(f"Request: {request.method} {request.url.path}")
 
-    logger.info(
-        f"{request.method} {request.url.path} "
-        f"{response.status_code} {duration:.3f}s"
-    )
+    try:
+        response = await call_next(request)
+        duration = time.time() - start_time
 
-    response.headers["X-Process-Time"] = str(duration)
-    return response
+        logger.info(
+            f"Response: {request.method} {request.url.path} "
+            f"- Status: {response.status_code} - Duration: {duration:.3f}s"
+        )
+
+        response.headers["X-Process-Time"] = str(duration)
+        return response
+
+    except Exception as e:
+        logger.error(
+            f"Request failed: {request.method} {request.url.path} - Error: {str(e)}"
+        )
+        raise
 
 # -----------------------
 # Global Exception Handler
 # -----------------------
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    logger.error("Unhandled exception", exc_info=True)
+    logger.error(
+        f"Unhandled exception: {type(exc).__name__} - {str(exc)}",
+        exc_info=True,
+    )
     return JSONResponse(
         status_code=500,
-        content={"detail": "Internal server error"},
+        content={
+            "detail": "Internal server error",
+            "error_type": type(exc).__name__,
+            "path": request.url.path,
+        },
     )
 
 # -----------------------
@@ -118,39 +122,30 @@ app.include_router(health.router, prefix="/api/v1/health", tags=["Health"])
 async def root():
     return {
         "name": "EventPulse API",
+        "version": "1.0.0",
         "status": "running",
-        "env": settings.APP_ENV,
+        "environment": settings.APP_ENV,
+        "docs": "/docs",
     }
 
 # -----------------------
-# STARTUP: Load API Keys ONCE
+# Startup
 # -----------------------
 @app.on_event("startup")
 async def startup_event():
-    logger.info("Starting EventPulse")
+    logger.info("EventPulse starting...")
 
-    # Load API keys into memory
-    async with AsyncSession(engine) as db:
-        result = await db.execute(
-            select(APIKey.key).where(APIKey.is_active == True)
-        )
-        for row in result:
-            API_KEY_CACHE.add(row[0])
-
-    logger.info(f"Loaded {len(API_KEY_CACHE)} API keys into cache")
-
-    # Init rate limiter
     await rate_limiter.initialize()
-
-    # Init WebSocket broadcaster
     await broadcaster.initialize()
+
     asyncio.create_task(broadcaster.subscribe_and_broadcast())
 
 # -----------------------
-# SHUTDOWN
+# Shutdown
 # -----------------------
 @app.on_event("shutdown")
 async def shutdown_event():
+    logger.info("EventPulse shutting down...")
+
     await rate_limiter.close()
     await broadcaster.close()
-    logger.info("EventPulse shutdown complete")
