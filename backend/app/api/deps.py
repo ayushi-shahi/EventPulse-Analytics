@@ -1,112 +1,77 @@
-# backend/app/api/deps.py (update)
+# backend/app/api/deps.py
+
 import asyncio
-from fastapi import Depends, HTTPException, status, Header, Request
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 from typing import Optional
 
-from app.database import get_db
-from app.models.api_key import APIKey
-from app.core.security import verify_api_key
+from fastapi import Depends, Header, HTTPException, Request, status
+
+from app.main import API_KEY_CACHE
 from app.core.rate_limiter import rate_limiter
 from app.services.websocket_broadcaster import broadcaster
 
-
+# -----------------------
+# API KEY VALIDATION (NO DB)
+# -----------------------
 async def get_api_key(
     x_api_key: Optional[str] = Header(None),
     authorization: Optional[str] = Header(None),
-    db: AsyncSession = Depends(get_db)
-) -> APIKey:
-    """
-    Dependency to validate API key from headers.
-    Accepts key in either:
-    - X-API-Key header
-    - Authorization: ApiKey <key> header
-    
-    Returns:
-        APIKey object if valid
-        
-    Raises:
-        HTTPException: If key is missing or invalid
-    """
-    api_key_value = None
-    
-    # Check X-API-Key header
+) -> str:
+    api_key = None
+
     if x_api_key:
-        api_key_value = x_api_key
-    
-    # Check Authorization header (format: "ApiKey <key>")
+        api_key = x_api_key
     elif authorization and authorization.startswith("ApiKey "):
-        api_key_value = authorization.replace("ApiKey ", "")
-    
-    if not api_key_value:
+        api_key = authorization.replace("ApiKey ", "")
+
+    if not api_key:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="API key required. Provide via X-API-Key header or Authorization: ApiKey <key>"
+            detail="API key required",
         )
-    
-    # Query all active API keys
-    result = await db.execute(
-        select(APIKey).where(APIKey.is_active == True)
-    )
-    api_keys = result.scalars().all()
-    
-    # Find matching key
-    for key in api_keys:
-        if verify_api_key(api_key_value, key.key_hash):
-            return key
-    
-    # No match found
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid API key"
-    )
 
+    if api_key not in API_KEY_CACHE:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API key",
+        )
 
+    return api_key
+
+# -----------------------
+# RATE LIMIT CHECK
+# -----------------------
 async def check_rate_limit(
     request: Request,
-    api_key: APIKey = Depends(get_api_key)
-) -> APIKey:
-    """
-    Dependency that checks rate limits for an API key.
-    
-    Returns:
-        APIKey object if under limit
-        
-    Raises:
-        HTTPException: If rate limit exceeded (429)
-    """
-    # Check rate limit
+    api_key: str = Depends(get_api_key),
+) -> str:
     is_allowed, info = await rate_limiter.is_allowed(
-        key=str(api_key.id),
-        limit=api_key.rate_limit,
-        window_seconds=60  # 1 minute window
+        key=api_key,
+        limit=60,           # per minute (adjust)
+        window_seconds=60,
     )
-    
-    # Add rate limit headers to response
+
     request.state.rate_limit_info = info
-    
+
     if not is_allowed:
-        # Notify WebSocket clients (e.g. Live Feed) so they can show banner and stop
         try:
             asyncio.create_task(
                 broadcaster.publish_rate_limit_exceeded(
-                    client_id=str(api_key.id),
+                    client_id=api_key,
                     limit=info["limit"],
                     reset_at=info.get("reset_at"),
                 )
             )
         except Exception:
             pass
+
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Rate limit exceeded. Limit: {info['limit']} requests per minute",
+            detail="Rate limit exceeded",
             headers={
                 "X-RateLimit-Limit": str(info["limit"]),
                 "X-RateLimit-Remaining": "0",
-                "X-RateLimit-Reset": str(info["reset_at"]),
-                "Retry-After": "60"
-            }
+                "Retry-After": "60",
+            },
         )
-    
+
     return api_key
