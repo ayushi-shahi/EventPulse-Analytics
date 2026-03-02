@@ -37,8 +37,8 @@ docker-compose up --build
 
 ### 3. Access API
 
-- **API Docs**: http://localhost:8000/docs
-- **Health Check**: http://localhost:8000/api/v1/health/
+- **API Docs**: http://localhost:8002/docs
+- **Health Check**: http://localhost:8002/api/v1/health/
 
 ## Local Development (Without Docker)
 
@@ -79,12 +79,12 @@ celery -A beat.celery_app beat --loglevel=info
 
 ```bash
 # Register user
-curl -X POST http://localhost:8000/api/v1/auth/register \
+curl -X POST http://localhost:8002/api/v1/auth/register \
   -H "Content-Type: application/json" \
   -d '{"email":"user@example.com","password":"password123"}'
 
 # Login
-curl -X POST http://localhost:8000/api/v1/auth/login \
+curl -X POST http://localhost:8002/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"user@example.com","password":"password123"}'
 ```
@@ -93,7 +93,7 @@ curl -X POST http://localhost:8000/api/v1/auth/login \
 
 ```bash
 # Create API key (requires JWT token)
-curl -X POST http://localhost:8000/api/v1/api-keys/ \
+curl -X POST http://localhost:8002/api/v1/api-keys/ \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"client_name":"My App","rate_limit":5000}'
@@ -103,13 +103,13 @@ curl -X POST http://localhost:8000/api/v1/api-keys/ \
 
 ```bash
 # Send single event
-curl -X POST http://localhost:8000/api/v1/ingest/events \
+curl -X POST http://localhost:8002/api/v1/ingest/events \
   -H "X-API-Key: YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"event_name":"page_view","user_id":"user123","properties":{"page":"/home"}}'
 
 # Send batch
-curl -X POST http://localhost:8000/api/v1/ingest/events/batch \
+curl -X POST http://localhost:8002/api/v1/ingest/events/batch \
   -H "X-API-Key: YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"events":[{"event_name":"click","user_id":"user456"}]}'
@@ -119,7 +119,7 @@ curl -X POST http://localhost:8000/api/v1/ingest/events/batch \
 
 ```bash
 # Get overview
-curl http://localhost:8000/api/v1/metrics/overview?period=last_hour \
+curl http://localhost:8002/api/v1/metrics/overview?period=last_hour \
   -H "X-API-Key: YOUR_API_KEY"
 
 # Get time series
@@ -131,7 +131,7 @@ curl http://localhost:8000/api/v1/metrics/time-series/events_per_minute \
 
 ```bash
 # Create alert
-curl -X POST http://localhost:8000/api/v1/alerts/ \
+curl -X POST http://localhost:8002/api/v1/alerts/ \
   -H "X-API-Key: YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
