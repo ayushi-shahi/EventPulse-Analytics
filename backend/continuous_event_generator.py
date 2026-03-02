@@ -5,7 +5,7 @@ import random
 from datetime import datetime
 
 API_KEY = ""
-BASE_URL = "http://127.0.0.1:8000/api/v1"
+BASE_URL = "http://127.0.0.1:8002/api/v1"
 
 headers = {
     "X-API-Key": API_KEY,

@@ -15,7 +15,7 @@ Write-Host ""
 
 # 2. Check API health  
 Write-Host "2️⃣ Checking API Health..." -ForegroundColor Yellow
-$health = Invoke-RestMethod -Uri "http://localhost:8000/api/v1/health/" -UseBasicParsing
+$health = Invoke-RestMethod -Uri "http://localhost:8002/api/v1/health/" -UseBasicParsing
 if ($health.status -eq "healthy") {
     Write-Host "✅ API healthy (Database+Redis)" -ForegroundColor Green
 } else {
@@ -33,11 +33,11 @@ Write-Host ""
 
 # 4. Final metrics
 Write-Host "4️⃣ Live Metrics..." -ForegroundColor Yellow
-$metrics = Invoke-RestMethod -Uri "http://localhost:8000/api/v1/metrics/overview?period=last_hour" -Headers @{"X-API-Key" = 'ep_live_9ab68f299a3d2f71234269e2b309b4a891328444441e7a508489e1fa62cc6c72'} -UseBasicParsing
+$metrics = Invoke-RestMethod -Uri "http://localhost:8002/api/v1/metrics/overview?period=last_hour" -Headers @{"X-API-Key" = 'ep_live_9ab68f299a3d2f71234269e2b309b4a891328444441e7a508489e1fa62cc6c72'} -UseBasicParsing
 Write-Host "   Total Events: " -ForegroundColor Green
 Write-Host "   Events/Min: " -ForegroundColor Green
 Write-Host "   Active Users: " -ForegroundColor Green
 
 Write-Host ""
 Write-Host "🎉 SYSTEM VERIFICATION COMPLETE! 🚀" -ForegroundColor Green
-Write-Host "📚 API Docs: http://localhost:8000/docs" -ForegroundColor Cyan
+Write-Host "📚 API Docs: http://localhost:8002/docs" -ForegroundColor Cyan

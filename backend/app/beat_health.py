@@ -2,7 +2,7 @@
 from celery import Celery
 import sys
 
-celery_app = Celery("beat", broker="redis://redis:6379/0")
+celery_app = Celery("beat", broker="redis://eventpulse_redis:6379/0")
 
 try:
     response = celery_app.control.ping(timeout=1)

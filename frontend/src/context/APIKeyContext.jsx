@@ -1,157 +1,146 @@
-import React, { createContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useState, useCallback, useEffect, useRef } from 'react';
 import { useAuth } from '../hooks/useAuth';
 
 export const APIKeyContext = createContext(null);
 
+// ---------------------------------------------------------------------------
+// Storage helpers (kept outside the component so they never re-create)
+// ---------------------------------------------------------------------------
+const KEYS = {
+  API_KEY:  'selected_api_key',
+  META:     'selected_api_key_metadata',
+  LEGACY_ID:'selected_api_key_id',
+};
+
+function readFromStorage() {
+  try {
+    const apiKey = localStorage.getItem(KEYS.API_KEY);
+    if (!apiKey) return null;
+
+    const metaRaw = localStorage.getItem(KEYS.META);
+    const meta    = metaRaw ? JSON.parse(metaRaw) : {};
+
+    return {
+      id:          meta.id          ?? localStorage.getItem(KEYS.LEGACY_ID) ?? apiKey,
+      api_key:     apiKey,
+      client_name: meta.client_name ?? 'Unknown',
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeToStorage(keyData) {
+  try {
+    localStorage.setItem(KEYS.API_KEY, keyData.api_key);
+    localStorage.setItem(KEYS.META, JSON.stringify({
+      id:          keyData.id,
+      client_name: keyData.client_name,
+    }));
+    localStorage.removeItem(KEYS.LEGACY_ID);
+  } catch (err) {
+    console.error('❌ Failed to persist API key:', err);
+  }
+}
+
+function clearStorage() {
+  try {
+    Object.values(KEYS).forEach(k => localStorage.removeItem(k));
+  } catch { /* ignore */ }
+}
+
+// ---------------------------------------------------------------------------
+// Provider
+// ---------------------------------------------------------------------------
 export const APIKeyProvider = ({ children }) => {
-  const { user } = useAuth();
-  const [selectedAPIKey, setSelectedAPIKey] = useState(null);
-  const [apiKeys, setApiKeys] = useState([]);
+  // useAuth may expose `loading` (or `isLoading`) while it rehydrates the
+  // session after a refresh.  We support both naming conventions and fall back
+  // to a ref-based approach when neither is available.
+  const auth = useAuth();
+  const user        = auth.user;
+  // Accept loading / isLoading / initializing — whichever the hook exposes
+  const authLoading = auth.loading ?? auth.isLoading ?? auth.initializing ?? false;
 
-  /**
-   * Load selected API key from localStorage on mount
-   */
-  useEffect(() => {
-    loadSelectedAPIKey();
-  }, []);
+  // ✅ FIX 1: Lazy initializer — reads localStorage synchronously on first
+  //    render, so the key is available immediately (survives page refresh).
+  const [selectedAPIKey, setSelectedAPIKey] = useState(() => readFromStorage());
+  const [apiKeys, setApiKeys]               = useState([]);
 
-  /**
-   * Clear API key when user changes
-   */
+  // Keep a ref in sync so callbacks never capture stale state
+  const selectedAPIKeyRef = useRef(selectedAPIKey);
+  useEffect(() => { selectedAPIKeyRef.current = selectedAPIKey; }, [selectedAPIKey]);
+
+  // Track the previous confirmed user so we can tell the difference between
+  // "auth is still loading (user transiently null)" and "user actually logged out".
+  const prevUserRef = useRef(user);
+
+  // ✅ FIX: Only clear when auth has finished loading AND user transitioned
+  //    from a real logged-in value to null.  This prevents the false-logout
+  //    that fires on every refresh while the session is being rehydrated.
   useEffect(() => {
-    if (user === null) {
-      // User logged out - clear everything
+    // Still resolving — don't act yet
+    if (authLoading) return;
+
+    const prevUser = prevUserRef.current;
+    prevUserRef.current = user;
+
+    // user went from a real value → null after auth finished loading = genuine logout
+    if (prevUser !== null && user === null) {
       console.log('🔄 User logged out - clearing API key');
+      clearStorage();
       setSelectedAPIKey(null);
       setApiKeys([]);
     }
-  }, [user]);
+  }, [user, authLoading]);
 
-  /**
-   * Load API key from localStorage
-   */
-  const loadSelectedAPIKey = () => {
-    try {
-      const storedKey = localStorage.getItem('selected_api_key');
-      const metadataStr = localStorage.getItem('selected_api_key_metadata');
-      
-      if (storedKey && metadataStr) {
-        const metadata = JSON.parse(metadataStr);
-        setSelectedAPIKey({
-          id: metadata.id,
-          api_key: storedKey,
-          key: storedKey,
-          client_name: metadata.client_name,
-        });
-        console.log('✅ Loaded API key from localStorage:', {
-          id: metadata.id,
-          client_name: metadata.client_name,
-        });
-      } else if (storedKey) {
-        // Backwards compatibility
-        const keyId = localStorage.getItem('selected_api_key_id');
-        setSelectedAPIKey({
-          id: keyId || storedKey,
-          api_key: storedKey,
-          key: storedKey,
-          client_name: 'Unknown',
-        });
-        console.log('⚠️ Loaded API key in legacy format');
-      }
-    } catch (error) {
-      console.error('Failed to load API key from localStorage:', error);
-      clearAPIKey();
-    }
-  };
-
-  /**
-   * Select an API key
-   */
+  // ---------------------------------------------------------------------------
   const selectAPIKey = useCallback((keyData) => {
     if (!keyData) {
-      clearAPIKey();
+      clearStorage();
+      setSelectedAPIKey(null);
       return;
     }
 
-    const apiKey = keyData.api_key || keyData.key;
+    const apiKey = keyData.api_key ?? keyData.key;
     if (!apiKey) {
-      console.error('❌ Invalid API key data - missing api_key:', keyData);
+      console.error('❌ Invalid API key data — missing api_key:', keyData);
       return;
     }
 
-    try {
-      // Store the API key string
-      localStorage.setItem('selected_api_key', apiKey);
-      
-      // Store metadata separately
-      const metadata = {
-        id: keyData.id,
-        client_name: keyData.client_name || 'Unknown',
-      };
-      localStorage.setItem('selected_api_key_metadata', JSON.stringify(metadata));
-      
-      // Clean up legacy storage
-      localStorage.removeItem('selected_api_key_id');
-      
-      // Update state
-      const apiKeyData = {
-        id: keyData.id,
-        api_key: apiKey,
-        key: apiKey,
-        client_name: keyData.client_name || 'Unknown',
-      };
-      
-      setSelectedAPIKey(apiKeyData);
-      
-      console.log('✅ API key selected:', {
-        id: apiKeyData.id,
-        client_name: apiKeyData.client_name,
-      });
-    } catch (error) {
-      console.error('❌ Failed to save API key to localStorage:', error);
-    }
+    const normalized = {
+      id:          keyData.id,
+      api_key:     apiKey,
+      client_name: keyData.client_name ?? 'Unknown',
+    };
+
+    writeToStorage(normalized);
+    setSelectedAPIKey(normalized);
+    console.log('✅ API key selected:', { id: normalized.id, client_name: normalized.client_name });
   }, []);
 
-  /**
-   * Clear selected API key
-   */
   const clearAPIKey = useCallback(() => {
-    localStorage.removeItem('selected_api_key');
-    localStorage.removeItem('selected_api_key_metadata');
-    localStorage.removeItem('selected_api_key_id');
+    clearStorage();
     setSelectedAPIKey(null);
     console.log('🗑️ API key cleared');
   }, []);
 
-  /**
-   * Update API keys list
-   */
+  // ✅ FIX: Use ref to avoid stale closure without recreating the callback on
+  //    every key change (which would cause downstream re-renders).
   const updateAPIKeys = useCallback((keys) => {
     setApiKeys(keys);
-    
-    // If we have a selected API key, verify it still exists in the list
-    if (selectedAPIKey && keys.length > 0) {
-      const keyStillExists = keys.some(k => k.id === selectedAPIKey.id);
-      if (!keyStillExists) {
-        console.log('⚠️ Selected API key no longer exists - clearing');
-        clearAPIKey();
-      }
+    const current = selectedAPIKeyRef.current;
+    if (current && keys.length > 0 && !keys.some(k => k.id === current.id)) {
+      console.warn('⚠️ Selected API key no longer exists — clearing');
+      clearStorage();
+      setSelectedAPIKey(null);
     }
-    
     console.log(`📋 Updated API keys list: ${keys.length} keys`);
-  }, [selectedAPIKey, clearAPIKey]);
+  }, []); // no deps needed — uses ref
 
-  /**
-   * Check if an API key is selected
-   */
-  const hasSelectedKey = selectedAPIKey !== null && !!selectedAPIKey.api_key;
-
-  /**
-   * Get the current API key string
-   */
-  const getAPIKeyString = useCallback(() => {
-    return selectedAPIKey?.api_key || selectedAPIKey?.key || null;
-  }, [selectedAPIKey]);
+  const getAPIKeyString = useCallback(
+    () => selectedAPIKey?.api_key ?? null,
+    [selectedAPIKey]
+  );
 
   const value = {
     selectedAPIKey,
@@ -159,7 +148,7 @@ export const APIKeyProvider = ({ children }) => {
     selectAPIKey,
     clearAPIKey,
     updateAPIKeys,
-    hasSelectedKey,
+    hasSelectedKey: !!selectedAPIKey?.api_key,
     getAPIKeyString,
   };
 

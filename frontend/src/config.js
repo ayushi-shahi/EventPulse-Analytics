@@ -1,7 +1,7 @@
 // API Configuration
 export const API_CONFIG = {
-  BASE_URL: import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1',
-  WS_URL: import.meta.env.VITE_WS_URL || 'ws://localhost:8000/api/v1',
+  BASE_URL: import.meta.env.VITE_API_URL || 'http://localhost:8002/api/v1',
+  WS_URL: import.meta.env.VITE_WS_URL || 'ws://localhost:8002/api/v1',
   TIMEOUT: 30000,
 };
 

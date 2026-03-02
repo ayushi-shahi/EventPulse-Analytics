@@ -3,25 +3,24 @@ import { Radio, Trash2, Download, AlertTriangle, X, Activity, Pause, Play } from
 import { useAPIKey } from '../hooks/useAPIKey';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useNotification } from '../hooks/useNotification';
-import Card from '../components/common/Card';
 import Button from '../components/common/Button';
 import Badge from '../components/common/Badge';
 import EmptyState from '../components/common/EmptyState';
 import { formatDate, formatJSON } from '../utils/formatters';
+import { useNavigate } from "react-router-dom";
 
 function eventsToCSV(events) {
   const headers = ['Timestamp', 'Event Name', 'User ID', 'Properties'];
   const rows = events.map((ev) => {
-    const ts = ev.timestamp || ev.data?.received_at;
-    const name = ev.data?.event_name || 'Unknown';
+    const ts     = ev.timestamp || ev.data?.received_at;
+    const name   = ev.data?.event_name || 'Unknown';
     const userId = ev.data?.user_id || '';
-    const props = ev.data?.properties
+    const props  = ev.data?.properties
       ? JSON.stringify(ev.data.properties).replace(/"/g, '""')
       : '';
     return [formatDate(ts), name, userId, '"' + props + '"'];
   });
-  const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n');
-  return '\uFEFF' + csvContent;
+  return '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n');
 }
 
 const LiveFeed = () => {
@@ -40,105 +39,129 @@ const LiveFeed = () => {
   } = useWebSocket();
   const { success, error: showError } = useNotification();
 
-  const [isPaused, setIsPaused] = useState(false);
+  const [isPaused, setIsPaused]         = useState(false);
   const [pausedEvents, setPausedEvents] = useState([]);
-  const [pausedCount, setPausedCount] = useState(0);
-  const [autoScroll, setAutoScroll] = useState(true);
-  const eventsContainerRef = useRef(null);
+  const [pausedCount, setPausedCount]   = useState(0);
+  const [autoScroll, setAutoScroll]     = useState(true);
+  const eventsContainerRef              = useRef(null);
+  const navigate = useNavigate();
 
-  // When paused is toggled, freeze current state
-  useEffect(() => {
-    if (isPaused) {
-      setPausedEvents([...events]);
-      setPausedCount(totalEventsCount);
-    }
-  }, [isPaused]);
-
-  // Display paused or live events based on state
-  const displayedEvents = isPaused ? pausedEvents : events;
-  const displayedCount = isPaused ? pausedCount : totalEventsCount;
+  // ─── Connection management ────────────────────────────────────────────────
+  // Dep is selectedAPIKey?.id — fires only when the actual key changes,
+  // not on every object re-reference. connect() in the context handles
+  // hard-closing the old socket, bumping the generation counter (so stale
+  // messages are dropped), clearing all event state, then opening the new
+  // socket.  We only need to reset local pause state here.
+  const prevKeyIdRef = useRef(selectedAPIKey?.id ?? null);
 
   useEffect(() => {
-    if (hasSelectedKey && selectedAPIKey) {
-      resetRateLimit();
+    const currentId  = selectedAPIKey?.id ?? null;
+    const keyChanged = currentId !== prevKeyIdRef.current;
+    prevKeyIdRef.current = currentId;
+
+    if (keyChanged) {
+      // Reset local pause snapshot — context already clears event arrays
       setIsPaused(false);
+      setPausedEvents([]);
+      setPausedCount(0);
+    }
+
+    if (hasSelectedKey && selectedAPIKey) {
       connect(selectedAPIKey.id, selectedAPIKey.api_key || selectedAPIKey.key);
     } else {
       disconnect();
     }
-    return () => disconnect();
-  }, [hasSelectedKey, selectedAPIKey, connect, disconnect, resetRateLimit]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedAPIKey?.id, hasSelectedKey]);
+  // connect/disconnect are stable useCallback refs — excluding them from deps
+  // prevents spurious reconnects on unrelated re-renders.
 
-  // Auto-pause when rate limit is exceeded
+  // ─── Auto-pause on rate limit ─────────────────────────────────────────────
   useEffect(() => {
-    if (rateLimitExceeded) {
-      setIsPaused(true);
-    }
+    if (rateLimitExceeded) setIsPaused(true);
   }, [rateLimitExceeded]);
 
+  // ─── Freeze snapshot when pausing ────────────────────────────────────────
+  // Only snapshot on the transition isPaused: false → true, not on every tick.
+  const prevIsPausedRef = useRef(false);
+  useEffect(() => {
+    const wasRunning = !prevIsPausedRef.current;
+    prevIsPausedRef.current = isPaused;
+
+    if (isPaused && wasRunning) {
+      setPausedEvents([...events]);
+      setPausedCount(totalEventsCount);
+    }
+  }, [isPaused, events, totalEventsCount]);
+
+  // ─── Auto-scroll ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (autoScroll && eventsContainerRef.current && !isPaused) {
       eventsContainerRef.current.scrollTop = eventsContainerRef.current.scrollHeight;
     }
-  }, [displayedEvents, autoScroll, isPaused]);
+  }, [events, autoScroll, isPaused]);
 
+  const displayedEvents = isPaused ? pausedEvents : events;
+  const displayedCount  = isPaused ? pausedCount  : totalEventsCount;
+
+  // ─── Handlers ─────────────────────────────────────────────────────────────
   const handlePauseToggle = () => {
     if (rateLimitExceeded && !isPaused) {
-      showError('Cannot resume - rate limit exceeded');
+      showError('Cannot resume — rate limit exceeded');
       return;
     }
-    setIsPaused(!isPaused);
+    setIsPaused((prev) => !prev);
   };
 
-  const handleExportExcel = () => {
-    if (!displayedEvents.length) {
-      showError('No events to export');
-      return;
-    }
-    const csvStr = eventsToCSV(displayedEvents);
-    const blob = new Blob([csvStr], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'events-' + Date.now() + '.csv';
-    link.click();
+  const handleExportCSV = () => {
+    if (!displayedEvents.length) { showError('No events to export'); return; }
+    const blob = new Blob([eventsToCSV(displayedEvents)], { type: 'text/csv;charset=utf-8' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `events-${Date.now()}.csv`;
+    a.click();
     URL.revokeObjectURL(url);
     success('Events exported to CSV (Excel compatible)');
   };
 
   const handleClear = () => {
-    if (window.confirm('Are you sure you want to clear all events?')) {
-      clearEvents();
-      setPausedEvents([]);
-      setPausedCount(0);
-      success('Events cleared');
-    }
+    if (!window.confirm('Are you sure you want to clear all events?')) return;
+    clearEvents();
+    setPausedEvents([]);
+    setPausedCount(0);
+    setIsPaused(false);
+    success('Events cleared');
   };
 
   const handleDismissRateLimit = () => {
     resetRateLimit();
     setIsPaused(false);
+    if (selectedAPIKey) {
+      connect(selectedAPIKey.id, selectedAPIKey.api_key || selectedAPIKey.key);
+    }
   };
 
   const getEventColor = (eventName) => {
     const colors = {
       page_view: 'bg-blue-50 border-l-4 border-l-blue-500',
-      click: 'bg-green-50 border-l-4 border-l-green-500',
-      error: 'bg-red-50 border-l-4 border-l-red-500',
-      purchase: 'bg-purple-50 border-l-4 border-l-purple-500',
+      click:     'bg-green-50 border-l-4 border-l-green-500',
+      error:     'bg-red-50 border-l-4 border-l-red-500',
+      purchase:  'bg-purple-50 border-l-4 border-l-purple-500',
     };
     return colors[eventName] || 'bg-gray-50 border-l-4 border-l-gray-400';
   };
 
+  // ─── No key selected ──────────────────────────────────────────────────────
   if (!hasSelectedKey) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-8">
+      <div className="min-h-screen -mt-[700px] flex items-center justify-center bg-gray-50 px-4 py-8">
         <EmptyState
           icon={Radio}
           title="No API Key Selected"
           description="Please select an API key to view live events."
           actionLabel="Go to API Keys"
-          onAction={() => (window.location.href = '/api-keys')}
+          onAction={() => navigate('/api-keys')}
         />
       </div>
     );
@@ -148,7 +171,8 @@ const LiveFeed = () => {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         <div className="space-y-4 sm:space-y-6">
-          {/* Rate Limit Banner */}
+
+          {/* ── Rate Limit Banner ─────────────────────────────────────────── */}
           {rateLimitExceeded && (
             <div className="animate-pulse-slow">
               <div className="bg-red-500 text-white rounded-xl p-5 sm:p-6 shadow-2xl border-4 border-red-600">
@@ -159,26 +183,21 @@ const LiveFeed = () => {
                     </div>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-lg sm:text-xl font-bold mb-2">
-                      🚫 Rate Limit Exceeded
-                    </h3>
+                    <h3 className="text-lg sm:text-xl font-bold mb-2">🚫 Rate Limit Exceeded</h3>
                     <p className="text-sm sm:text-base text-red-100 mb-4">
-                      Your API key has reached its request limit. Event stream has been paused automatically.
-                      No new events will be recorded until the limit resets.
+                      Your API key has reached its request limit. Event stream has been paused
+                      automatically. No new events will be recorded until the limit resets.
                     </p>
                     <div className="flex flex-wrap gap-2 sm:gap-3">
                       <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleDismissRateLimit}
+                        variant="outline" size="sm" onClick={handleDismissRateLimit}
                         className="bg-white text-red-600 hover:bg-red-50 border-2 border-white font-semibold"
                       >
                         Clear Error & Resume
                       </Button>
                       <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => window.location.href = '/api-keys'}
+                        variant="outline" size="sm"
+                        onClick={() => (window.location.href = '/api-keys')}
                         className="bg-white text-red-600 hover:bg-red-50 border-2 border-white font-semibold"
                       >
                         Manage API Keys
@@ -196,7 +215,7 @@ const LiveFeed = () => {
             </div>
           )}
 
-          {/* Current Alert Display */}
+          {/* ── Alert Banner ──────────────────────────────────────────────── */}
           {currentAlert && !rateLimitExceeded && (
             <div className="animate-slide-down">
               <div className={`rounded-xl p-4 sm:p-5 shadow-lg border-l-8 ${
@@ -219,7 +238,7 @@ const LiveFeed = () => {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
-                        <Badge 
+                        <Badge
                           variant={
                             currentAlert.severity === 'error' || currentAlert.severity === 'critical'
                               ? 'danger'
@@ -241,14 +260,10 @@ const LiveFeed = () => {
                       {currentAlert.context && (
                         <div className="flex flex-wrap gap-3 sm:gap-4 text-xs text-gray-700">
                           {currentAlert.context.current_value != null && (
-                            <span>
-                              <span className="font-semibold">Current:</span> {currentAlert.context.current_value}
-                            </span>
+                            <span><span className="font-semibold">Current:</span> {currentAlert.context.current_value}</span>
                           )}
                           {currentAlert.context.threshold != null && (
-                            <span>
-                              <span className="font-semibold">Threshold:</span> {currentAlert.context.threshold}
-                            </span>
+                            <span><span className="font-semibold">Threshold:</span> {currentAlert.context.threshold}</span>
                           )}
                         </div>
                       )}
@@ -265,7 +280,7 @@ const LiveFeed = () => {
             </div>
           )}
 
-          {/* Header */}
+          {/* ── Header ───────────────────────────────────────────────────── */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 sm:p-6 -mt-72">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="flex items-center gap-3 sm:gap-4">
@@ -275,35 +290,20 @@ const LiveFeed = () => {
                 <div className="min-w-0 flex-1">
                   <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Live Event Feed</h1>
                   <p className="text-sm sm:text-base text-gray-600 mt-0.5 truncate">
-                    Real-time from <span className="font-semibold text-blue-600">{selectedAPIKey?.client_name}</span>
+                    Real-time from{' '}
+                    <span className="font-semibold text-blue-600">{selectedAPIKey?.client_name}</span>
                   </p>
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                <Badge 
-                  variant={
-                    rateLimitExceeded 
-                      ? 'danger' 
-                      : isPaused 
-                        ? 'warning' 
-                        : isConnected 
-                          ? 'success' 
-                          : 'danger'
-                  } 
+                <Badge
+                  variant={rateLimitExceeded ? 'danger' : isPaused ? 'warning' : isConnected ? 'success' : 'danger'}
                   className="text-xs sm:text-sm px-3 py-1.5 sm:px-4 sm:py-2"
                 >
-                  {rateLimitExceeded 
-                    ? '⚠ Rate Limited' 
-                    : isPaused 
-                      ? '⏸ Paused' 
-                      : isConnected 
-                        ? '● Live' 
-                        : '○ Disconnected'}
+                  {rateLimitExceeded ? '⚠ Rate Limited' : isPaused ? '⏸ Paused' : isConnected ? '● Live' : '○ Disconnected'}
                 </Badge>
-                
                 <Button
-                  variant={isPaused ? 'primary' : 'outline'}
-                  size="sm"
+                  variant={isPaused ? 'primary' : 'outline'} size="sm"
                   icon={isPaused ? Play : Pause}
                   onClick={handlePauseToggle}
                   disabled={!isConnected && !isPaused}
@@ -311,21 +311,16 @@ const LiveFeed = () => {
                   <span className="hidden sm:inline">{isPaused ? 'Resume' : 'Pause'} Feed</span>
                   <span className="sm:hidden">{isPaused ? 'Resume' : 'Pause'}</span>
                 </Button>
-                
                 <Button
-                  variant="outline"
-                  size="sm"
-                  icon={Download}
-                  onClick={handleExportExcel}
+                  variant="outline" size="sm" icon={Download}
+                  onClick={handleExportCSV}
                   disabled={displayedEvents.length === 0}
                 >
                   <span className="hidden sm:inline">Export CSV</span>
                   <span className="sm:hidden">Export</span>
                 </Button>
                 <Button
-                  variant="outline"
-                  size="sm"
-                  icon={Trash2}
+                  variant="outline" size="sm" icon={Trash2}
                   onClick={handleClear}
                   disabled={displayedEvents.length === 0}
                 >
@@ -336,7 +331,7 @@ const LiveFeed = () => {
             </div>
           </div>
 
-          {/* Pause Status Banner */}
+          {/* ── Pause Banner ─────────────────────────────────────────────── */}
           {isPaused && !rateLimitExceeded && (
             <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-4 shadow-sm">
               <div className="flex items-start gap-3">
@@ -344,55 +339,37 @@ const LiveFeed = () => {
                 <div className="flex-1 min-w-0">
                   <h4 className="text-sm sm:text-base font-semibold text-amber-900">Event Stream Paused</h4>
                   <p className="text-xs sm:text-sm text-amber-700 mt-1">
-                    Events are frozen at {displayedCount.toLocaleString()} total events. Click "Resume Feed" to continue receiving live events.
+                    Events frozen at {displayedCount.toLocaleString()} total. Click "Resume Feed" to continue.
                   </p>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Stats */}
+          {/* ── Stats ────────────────────────────────────────────────────── */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-5 hover:shadow-md transition-shadow">
               <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
-                <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                  isPaused ? 'bg-amber-500' : 'bg-blue-500'
-                }`}>
+                <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${isPaused ? 'bg-amber-500' : 'bg-blue-500'}`}>
                   <Activity className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                 </div>
                 <p className="text-xs sm:text-sm font-semibold text-gray-500 uppercase">Total Events</p>
               </div>
-              <p className="text-2xl sm:text-3xl font-bold text-gray-900">
-                {displayedCount.toLocaleString()}
-              </p>
-              {isPaused && (
-                <p className="text-xs text-amber-600 mt-1 font-medium">Frozen</p>
-              )}
+              <p className="text-2xl sm:text-3xl font-bold text-gray-900">{displayedCount.toLocaleString()}</p>
+              {isPaused && <p className="text-xs text-amber-600 mt-1 font-medium">Frozen</p>}
             </div>
 
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-5 hover:shadow-md transition-shadow">
               <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
                 <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                  rateLimitExceeded 
-                    ? 'bg-red-500' 
-                    : isPaused 
-                      ? 'bg-amber-500' 
-                      : isConnected 
-                        ? 'bg-green-500' 
-                        : 'bg-red-500'
+                  rateLimitExceeded ? 'bg-red-500' : isPaused ? 'bg-amber-500' : isConnected ? 'bg-green-500' : 'bg-red-500'
                 }`}>
-                  <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-white rounded-full"></div>
+                  <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-white rounded-full" />
                 </div>
                 <p className="text-xs sm:text-sm font-semibold text-gray-500 uppercase">Status</p>
               </div>
               <p className="text-xl sm:text-2xl font-bold text-gray-900">
-                {rateLimitExceeded 
-                  ? 'Limited' 
-                  : isPaused 
-                    ? 'Paused' 
-                    : isConnected 
-                      ? 'Live' 
-                      : 'Offline'}
+                {rateLimitExceeded ? 'Limited' : isPaused ? 'Paused' : isConnected ? 'Live' : 'Offline'}
               </p>
             </div>
 
@@ -415,10 +392,8 @@ const LiveFeed = () => {
               <p className="text-xs sm:text-sm font-semibold text-gray-500 uppercase mb-2 sm:mb-3">Connection</p>
               <div className="flex items-center gap-2 sm:gap-3">
                 <div className={`w-3 h-3 sm:w-4 sm:h-4 rounded-full flex-shrink-0 ${
-                  isConnected && !rateLimitExceeded && !isPaused 
-                    ? 'bg-green-500 animate-pulse' 
-                    : 'bg-red-500'
-                }`}></div>
+                  isConnected && !rateLimitExceeded && !isPaused ? 'bg-green-500 animate-pulse' : 'bg-red-500'
+                }`} />
                 <span className="text-xs sm:text-sm font-medium text-gray-700">
                   {isConnected && !rateLimitExceeded && !isPaused ? 'Active' : 'Inactive'}
                 </span>
@@ -426,20 +401,17 @@ const LiveFeed = () => {
             </div>
           </div>
 
-          {/* Events Stream */}
+          {/* ── Event Stream ─────────────────────────────────────────────── */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div className="border-b border-gray-200 px-5 sm:px-6 py-3 sm:py-4 bg-gray-50">
               <div className="flex items-center justify-between">
                 <h2 className="text-base sm:text-lg font-bold text-gray-900">
                   Event Stream ({displayedEvents.length.toLocaleString()} displayed)
                 </h2>
-                {isPaused && (
-                  <Badge variant="warning" size="sm">
-                    ⏸ Paused
-                  </Badge>
-                )}
+                {isPaused && <Badge variant="warning" size="sm">⏸ Paused</Badge>}
               </div>
             </div>
+
             <div
               ref={eventsContainerRef}
               className="h-[500px] sm:h-[600px] overflow-y-auto p-4 sm:p-6 space-y-3 sm:space-y-4 bg-gray-50"
@@ -459,25 +431,20 @@ const LiveFeed = () => {
                       <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center mb-4 ${
                         rateLimitExceeded ? 'bg-red-100' : isPaused ? 'bg-amber-100' : 'bg-red-100'
                       }`}>
-                        {rateLimitExceeded || isPaused ? (
-                          <Pause className="w-8 h-8 sm:w-10 sm:h-10 text-amber-500" />
-                        ) : (
-                          <X className="w-8 h-8 sm:w-10 sm:h-10 text-red-500" />
-                        )}
+                        {rateLimitExceeded || isPaused
+                          ? <Pause className="w-8 h-8 sm:w-10 sm:h-10 text-amber-500" />
+                          : <X className="w-8 h-8 sm:w-10 sm:h-10 text-red-500" />
+                        }
                       </div>
                       <p className="text-base sm:text-lg font-medium text-gray-700">
-                        {rateLimitExceeded 
-                          ? 'Rate limit exceeded' 
-                          : isPaused 
-                            ? 'Event stream paused' 
-                            : 'Not connected'}
+                        {rateLimitExceeded ? 'Rate limit exceeded' : isPaused ? 'Event stream paused' : 'Not connected'}
                       </p>
                       <p className="text-xs sm:text-sm text-gray-500 mt-2">
-                        {rateLimitExceeded 
-                          ? 'No new events will be recorded' 
-                          : isPaused 
-                            ? 'Click Resume Feed to continue' 
-                            : 'Events will appear when connected'}
+                        {rateLimitExceeded
+                          ? 'No new events will be recorded'
+                          : isPaused
+                          ? 'Click Resume Feed to continue'
+                          : 'Events will appear when connected'}
                       </p>
                     </>
                   )}
@@ -486,9 +453,7 @@ const LiveFeed = () => {
                 displayedEvents.map((event, index) => (
                   <div
                     key={event.id || index}
-                    className={`rounded-xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-all ${getEventColor(
-                      event.data?.event_name
-                    )}`}
+                    className={`rounded-xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-all ${getEventColor(event.data?.event_name)}`}
                   >
                     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-0 mb-3">
                       <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
@@ -520,6 +485,7 @@ const LiveFeed = () => {
               )}
             </div>
           </div>
+
         </div>
       </div>
     </div>

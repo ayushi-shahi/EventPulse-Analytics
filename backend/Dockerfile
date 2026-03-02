@@ -21,10 +21,10 @@ COPY . .
 
 RUN mkdir -p logs
 
-EXPOSE 8000
+EXPOSE 8002
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8000/api/v1/health/live || exit 1
+    CMD curl -f http://localhost:8002/api/v1/health/live || exit 1
 
-# CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+# CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8002"]
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8002"]

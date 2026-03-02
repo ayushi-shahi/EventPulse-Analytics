@@ -42,7 +42,9 @@ function App() {
                     </ProtectedRoute>
                   }
                 >
-                  <Route index element={<Navigate to="/dashboard" replace />} />
+                  {/* Use a relative redirect here to avoid
+                      React Router v7 relativeSplatPath deprecation warnings */}
+                  <Route index element={<Navigate to="dashboard" replace />} />
                   <Route path="dashboard" element={<Dashboard />} />
                   <Route path="api-keys" element={<APIKeys />} />
                   <Route path="live-feed" element={<LiveFeed />} />

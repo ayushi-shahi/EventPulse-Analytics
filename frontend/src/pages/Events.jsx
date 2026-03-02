@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Activity, Search, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAPIKey } from '../hooks/useAPIKey';
 import { useNotification } from '../hooks/useNotification';
@@ -19,7 +19,7 @@ const Events = () => {
   const { selectedAPIKey, hasSelectedKey } = useAPIKey();
   const { success, error: showError } = useNotification();
 
-  const [events, setEvents] = useState([]);
+  const [events, setEvents]   = useState([]);
   const [loading, setLoading] = useState(false);
   const [pagination, setPagination] = useState({
     page: 1,
@@ -28,40 +28,58 @@ const Events = () => {
     total_pages: 0,
   });
 
-  // Filters
   const [filters, setFilters] = useState({
     event_name: '',
-    user_id: '',
+    user_id:    '',
     start_time: '',
-    end_time: '',
+    end_time:   '',
   });
 
   const [expandedRows, setExpandedRows] = useState({});
 
-  // Fetch events
+  // ✅ FIX 2 & 3: Track the previous API key ID.
+  //    When the selected key changes (or is cleared), wipe the current events
+  //    list and reset pagination/filters before fetching for the new key.
+  const prevKeyIdRef = useRef(selectedAPIKey?.id ?? null);
+
+  useEffect(() => {
+    const currentId = selectedAPIKey?.id ?? null;
+    const prevId    = prevKeyIdRef.current;
+
+    if (currentId !== prevId) {
+      prevKeyIdRef.current = currentId;
+
+      // Reset everything so the previous key's data never shows for the new key
+      setEvents([]);
+      setExpandedRows({});
+      setPagination({ page: 1, page_size: 50, total: 0, total_pages: 0 });
+      setFilters({ event_name: '', user_id: '', start_time: '', end_time: '' });
+    }
+  }, [selectedAPIKey]);
+
+  // Fetch events — depends on key, page, page_size, and filters
   const fetchEvents = useCallback(async () => {
     if (!hasSelectedKey) return;
 
     setLoading(true);
     try {
       const params = {
-        page: pagination.page,
+        page:      pagination.page,
         page_size: pagination.page_size,
       };
 
-      // Add filters if set
       if (filters.event_name) params.event_name = filters.event_name;
-      if (filters.user_id) params.user_id = filters.user_id;
+      if (filters.user_id)    params.user_id    = filters.user_id;
       if (filters.start_time) params.start_time = new Date(filters.start_time).toISOString();
-      if (filters.end_time) params.end_time = new Date(filters.end_time).toISOString();
+      if (filters.end_time)   params.end_time   = new Date(filters.end_time).toISOString();
 
       const data = await apiClient.getEvents(params);
-      
+
       setEvents(data.items || []);
       setPagination({
-        page: data.page,
-        page_size: data.page_size,
-        total: data.total,
+        page:        data.page,
+        page_size:   data.page_size,
+        total:       data.total,
         total_pages: data.total_pages,
       });
     } catch (err) {
@@ -71,62 +89,55 @@ const Events = () => {
     }
   }, [hasSelectedKey, pagination.page, pagination.page_size, filters, showError]);
 
-  // Initial fetch
+  // Re-fetch whenever the key, page, or page_size change.
+  // Filters are applied explicitly via the Apply button (see handleApplyFilters).
   useEffect(() => {
     if (hasSelectedKey) {
       fetchEvents();
+    } else {
+      // Key was deselected — clear the list immediately
+      setEvents([]);
+      setExpandedRows({});
+      setPagination({ page: 1, page_size: 50, total: 0, total_pages: 0 });
     }
-  }, [hasSelectedKey, pagination.page, pagination.page_size]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasSelectedKey, selectedAPIKey, pagination.page, pagination.page_size]);
 
-  // Handle filter change
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
     setFilters((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Apply filters
   const handleApplyFilters = () => {
     setPagination((prev) => ({ ...prev, page: 1 }));
     fetchEvents();
   };
 
-  // Clear filters
   const handleClearFilters = () => {
-    setFilters({
-      event_name: '',
-      user_id: '',
-      start_time: '',
-      end_time: '',
-    });
+    const cleared = { event_name: '', user_id: '', start_time: '', end_time: '' };
+    setFilters(cleared);
     setPagination((prev) => ({ ...prev, page: 1 }));
+    // fetchEvents will be called by the pagination useEffect after state settles;
+    // call explicitly too in case page was already 1 (no state change → no effect)
+    fetchEvents();
   };
 
-  // Pagination handlers
   const goToPage = (page) => {
     setPagination((prev) => ({ ...prev, page }));
   };
 
   const nextPage = () => {
-    if (pagination.page < pagination.total_pages) {
-      goToPage(pagination.page + 1);
-    }
+    if (pagination.page < pagination.total_pages) goToPage(pagination.page + 1);
   };
 
   const previousPage = () => {
-    if (pagination.page > 1) {
-      goToPage(pagination.page - 1);
-    }
+    if (pagination.page > 1) goToPage(pagination.page - 1);
   };
 
-  // Toggle row expansion
   const toggleRow = (eventId) => {
-    setExpandedRows((prev) => ({
-      ...prev,
-      [eventId]: !prev[eventId],
-    }));
+    setExpandedRows((prev) => ({ ...prev, [eventId]: !prev[eventId] }));
   };
 
-  // Export to CSV
   const handleExport = () => {
     const headers = ['ID', 'Event Name', 'User ID', 'Event Time', 'Received At', 'Properties'];
     const rows = events.map((event) => [
@@ -144,9 +155,9 @@ const Events = () => {
     ].join('\n');
 
     const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
+    const url  = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.href = url;
+    link.href     = url;
     link.download = `events-${Date.now()}.csv`;
     link.click();
     URL.revokeObjectURL(url);
@@ -156,13 +167,13 @@ const Events = () => {
 
   if (!hasSelectedKey) {
     return (
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-7xl mx-auto -mt-[400px]">
         <EmptyState
           icon={Activity}
           title="No API Key Selected"
           description="Please select an API key to view events."
           actionLabel="Go to API Keys"
-          onAction={() => window.location.href = '/api-keys'}
+          onAction={() => (window.location.href = '/api-keys')}
         />
       </div>
     );
@@ -175,7 +186,10 @@ const Events = () => {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Events</h1>
           <p className="text-gray-600 mt-1">
-            Browse and filter events from {selectedAPIKey?.client_name}
+            Browse and filter events from{' '}
+            <span className="font-semibold text-blue-600">
+              {selectedAPIKey?.client_name}
+            </span>
           </p>
         </div>
 
@@ -200,7 +214,6 @@ const Events = () => {
             placeholder="e.g., page_view"
             icon={Search}
           />
-
           <Input
             label="User ID"
             name="user_id"
@@ -208,7 +221,6 @@ const Events = () => {
             onChange={handleFilterChange}
             placeholder="Filter by user"
           />
-
           <Input
             label="Start Time"
             type="datetime-local"
@@ -216,7 +228,6 @@ const Events = () => {
             value={filters.start_time}
             onChange={handleFilterChange}
           />
-
           <Input
             label="End Time"
             type="datetime-local"
@@ -281,11 +292,9 @@ const Events = () => {
                     <React.Fragment key={event.id}>
                       <tr className="hover:bg-gray-50 transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="primary" size="sm">
-                              {event.event_name}
-                            </Badge>
-                          </div>
+                          <Badge variant="primary" size="sm">
+                            {event.event_name}
+                          </Badge>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {event.user_id || (
@@ -329,16 +338,17 @@ const Events = () => {
                                 </div>
                               </div>
 
-                              {event.properties && Object.keys(event.properties).length > 0 && (
-                                <div>
-                                  <p className="text-xs font-medium text-gray-500 uppercase mb-2">
-                                    Properties
-                                  </p>
-                                  <pre className="text-xs bg-white border border-gray-200 rounded p-3 overflow-x-auto">
-                                    {formatJSON(event.properties)}
-                                  </pre>
-                                </div>
-                              )}
+                              {event.properties &&
+                                Object.keys(event.properties).length > 0 && (
+                                  <div>
+                                    <p className="text-xs font-medium text-gray-500 uppercase mb-2">
+                                      Properties
+                                    </p>
+                                    <pre className="text-xs bg-white border border-gray-200 rounded p-3 overflow-x-auto">
+                                      {formatJSON(event.properties)}
+                                    </pre>
+                                  </div>
+                                )}
                             </div>
                           </td>
                         </tr>

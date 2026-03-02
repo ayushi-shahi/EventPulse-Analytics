@@ -4,7 +4,7 @@ import random
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 API_KEY = 'ep_live_9ab68f299a3d2f71234269e2b309b4a891328444441e7a508489e1fa62cc6c72'
-BASE_URL = "http://localhost:8000/api/v1"
+BASE_URL = "http://localhost:8002/api/v1"
 
 headers = {
     "X-API-Key": API_KEY,

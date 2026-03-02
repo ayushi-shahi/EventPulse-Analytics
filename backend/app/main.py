@@ -1,12 +1,19 @@
 # backend/app/main.py
+"""
+FastAPI application entry point.
 
+Startup and shutdown are handled via a single `lifespan` context manager
+(the modern FastAPI/Starlette approach). The deprecated @app.on_event
+decorator is not used anywhere.
+"""
+import asyncio
+import time
+from contextlib import asynccontextmanager
+
+import sentry_sdk
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-import asyncio
-import time
-import sentry_sdk
-
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 
@@ -16,16 +23,18 @@ from app.core.rate_limiter import rate_limiter
 from app.services.websocket_broadcaster import broadcaster
 from app.logging_config import setup_logging, get_logger
 
-# -----------------------
-# Logging
-# -----------------------
+# ---------------------------------------------------------------------------
+# Logging (must be first)
+# ---------------------------------------------------------------------------
+
 setup_logging()
 logger = get_logger(__name__)
 
-# -----------------------
-# Sentry
-# -----------------------
-if getattr(settings, "SENTRY_DSN", None):
+# ---------------------------------------------------------------------------
+# Sentry (optional — only initialised when SENTRY_DSN is set)
+# ---------------------------------------------------------------------------
+
+if settings.SENTRY_DSN:
     sentry_sdk.init(
         dsn=settings.SENTRY_DSN,
         environment=settings.SENTRY_ENVIRONMENT or settings.APP_ENV,
@@ -36,21 +45,68 @@ if getattr(settings, "SENTRY_DSN", None):
         ],
         send_default_pii=False,
     )
-    logger.info(f"Sentry initialized for environment: {settings.APP_ENV}")
+    logger.info(f"Sentry initialised (environment: {settings.APP_ENV})")
 
-# -----------------------
-# FastAPI app
-# -----------------------
+# ---------------------------------------------------------------------------
+# Lifespan — replaces the deprecated @app.on_event("startup/shutdown")
+# ---------------------------------------------------------------------------
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Manage application lifecycle resources.
+
+    Everything before `yield` runs on startup.
+    Everything after `yield` runs on shutdown.
+    Using a context manager guarantees shutdown always runs,
+    even if startup raises an exception partway through.
+    """
+    # --- Startup ---
+    logger.info("EventPulse starting up...")
+
+    await rate_limiter.initialize()
+    logger.info("Rate limiter initialised")
+
+    await broadcaster.initialize()
+    # Run the Redis → WebSocket relay in the background
+    broadcast_task = asyncio.create_task(broadcaster.subscribe_and_broadcast())
+    logger.info("WebSocket broadcaster started")
+
+    logger.info("EventPulse is ready ✅")
+
+    yield   # app is running here
+
+    # --- Shutdown ---
+    logger.info("EventPulse shutting down...")
+
+    broadcast_task.cancel()
+    try:
+        await broadcast_task
+    except asyncio.CancelledError:
+        pass  # expected
+
+    await broadcaster.close()
+    await rate_limiter.close()
+
+    logger.info("EventPulse shutdown complete")
+
+
+# ---------------------------------------------------------------------------
+# App
+# ---------------------------------------------------------------------------
+
 app = FastAPI(
     title="EventPulse API",
     description="Real-Time Event & Anomaly Analytics Platform",
     version="1.0.0",
     debug=settings.DEBUG,
+    lifespan=lifespan,          # ← modern approach
 )
 
-# -----------------------
-# CORS
-# -----------------------
+# ---------------------------------------------------------------------------
+# Middleware
+# ---------------------------------------------------------------------------
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -59,39 +115,40 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# -----------------------
-# Request Logging Middleware
-# -----------------------
+
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    start_time = time.time()
-    logger.info(f"Request: {request.method} {request.url.path}")
+    """Log every request with method, path, status code and duration."""
+    start = time.time()
+    logger.info(f"→ {request.method} {request.url.path}")
 
     try:
         response = await call_next(request)
-        duration = time.time() - start_time
-
+        duration = time.time() - start
         logger.info(
-            f"Response: {request.method} {request.url.path} "
-            f"- Status: {response.status_code} - Duration: {duration:.3f}s"
+            f"← {request.method} {request.url.path} "
+            f"{response.status_code} ({duration:.3f}s)"
         )
-
-        response.headers["X-Process-Time"] = str(duration)
+        response.headers["X-Process-Time"] = f"{duration:.3f}"
         return response
 
     except Exception as e:
+        duration = time.time() - start
         logger.error(
-            f"Request failed: {request.method} {request.url.path} - Error: {str(e)}"
+            f"✗ {request.method} {request.url.path} "
+            f"failed after {duration:.3f}s — {e}"
         )
         raise
 
-# -----------------------
-# Global Exception Handler
-# -----------------------
+
+# ---------------------------------------------------------------------------
+# Global exception handler
+# ---------------------------------------------------------------------------
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(
-        f"Unhandled exception: {type(exc).__name__} - {str(exc)}",
+        f"Unhandled exception: {type(exc).__name__} — {exc}",
         exc_info=True,
     )
     return JSONResponse(
@@ -103,22 +160,24 @@ async def global_exception_handler(request: Request, exc: Exception):
         },
     )
 
-# -----------------------
+# ---------------------------------------------------------------------------
 # Routers
-# -----------------------
-app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
-app.include_router(api_keys.router, prefix="/api/v1/api-keys", tags=["API Keys"])
-app.include_router(ingest.router, prefix="/api/v1/ingest", tags=["Event Ingestion"])
-app.include_router(metrics.router, prefix="/api/v1/metrics", tags=["Metrics"])
-app.include_router(alerts.router, prefix="/api/v1/alerts", tags=["Alerts"])
-app.include_router(admin.router, prefix="/api/v1/admin", tags=["Admin"])
-app.include_router(websockets.router, prefix="/api/v1/ws", tags=["WebSockets"])
-app.include_router(health.router, prefix="/api/v1/health", tags=["Health"])
+# ---------------------------------------------------------------------------
 
-# -----------------------
+app.include_router(auth.router,       prefix="/api/v1/auth",       tags=["Authentication"])
+app.include_router(api_keys.router,   prefix="/api/v1/api-keys",   tags=["API Keys"])
+app.include_router(ingest.router,     prefix="/api/v1/ingest",     tags=["Event Ingestion"])
+app.include_router(metrics.router,    prefix="/api/v1/metrics",    tags=["Metrics"])
+app.include_router(alerts.router,     prefix="/api/v1/alerts",     tags=["Alerts"])
+app.include_router(admin.router,      prefix="/api/v1/admin",      tags=["Admin"])
+app.include_router(websockets.router, prefix="/api/v1/ws",         tags=["WebSockets"])
+app.include_router(health.router,     prefix="/api/v1/health",     tags=["Health"])
+
+# ---------------------------------------------------------------------------
 # Root
-# -----------------------
-@app.get("/")
+# ---------------------------------------------------------------------------
+
+@app.get("/", tags=["Root"])
 async def root():
     return {
         "name": "EventPulse API",
@@ -127,25 +186,3 @@ async def root():
         "environment": settings.APP_ENV,
         "docs": "/docs",
     }
-
-# -----------------------
-# Startup
-# -----------------------
-@app.on_event("startup")
-async def startup_event():
-    logger.info("EventPulse starting...")
-
-    await rate_limiter.initialize()
-    await broadcaster.initialize()
-
-    asyncio.create_task(broadcaster.subscribe_and_broadcast())
-
-# -----------------------
-# Shutdown
-# -----------------------
-@app.on_event("shutdown")
-async def shutdown_event():
-    logger.info("EventPulse shutting down...")
-
-    await rate_limiter.close()
-    await broadcaster.close()

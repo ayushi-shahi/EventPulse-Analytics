@@ -19,8 +19,8 @@ docker-compose exec api alembic upgrade head
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "✅ EventPulse is running!" -ForegroundColor Green
-    Write-Host "📚 API Docs: http://localhost:8000/docs" -ForegroundColor Cyan
-    Write-Host "💚 Health: http://localhost:8000/api/v1/health/" -ForegroundColor Cyan
+    Write-Host "📚 API Docs: http://localhost:8002/docs" -ForegroundColor Cyan
+    Write-Host "💚 Health: http://localhost:8002/api/v1/health/" -ForegroundColor Cyan
 } else {
     Write-Host "❌ Migration failed!" -ForegroundColor Red
     docker-compose logs api

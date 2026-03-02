@@ -1,176 +1,213 @@
 # backend/app/tasks/tasks_ingest.py
+"""
+Event ingestion Celery tasks.
+
+Architecture:
+- Celery tasks are SYNCHRONOUS by nature
+- Redis dequeuing is done with the SYNC redis client (correct for Celery)
+- Database writes are ASYNC (via EventProcessor) and are run with asyncio.run()
+- There is no mixing of sync Redis inside async functions
+"""
 import asyncio
-import redis
+import json
+import logging
 from typing import List
-from celery import Task
+
+import redis  # sync redis — correct for Celery context
 
 from app.tasks.celery_app import celery_app
 from app.services.event_processor import EventProcessor
 from app.config import settings
 
+logger = logging.getLogger(__name__)
 
-class AsyncTask(Task):
-    """
-    Custom Celery task that supports async functions.
-    """
-    def __call__(self, *args, **kwargs):
-        loop = asyncio.get_event_loop()
-        return loop.run_until_complete(self.run(*args, **kwargs))
-    
-    async def run(self, *args, **kwargs):
-        raise NotImplementedError()
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
+def _dequeue_events(batch_size: int) -> List[str]:
+    """
+    Pull up to `batch_size` events from Redis queue using the SYNC client.
+
+    This runs inside a Celery worker (sync context), so using the sync
+    redis client is correct — no event loop involved here.
+
+    Returns a list of raw JSON strings.
+    """
+    redis_client = redis.from_url(
+        settings.REDIS_URL,
+        encoding="utf-8",
+        decode_responses=True,
+    )
+    events: List[str] = []
+    try:
+        # Use a pipeline for efficiency — single round-trip
+        with redis_client.pipeline() as pipe:
+            for _ in range(batch_size):
+                pipe.rpop("event_queue")
+            results = pipe.execute()
+
+        # Filter out None values (queue had fewer items than batch_size)
+        events = [r for r in results if r is not None]
+
+    except Exception as e:
+        logger.error(f"Redis dequeue error: {e}", exc_info=True)
+    finally:
+        redis_client.close()
+
+    return events
+
+
+async def _insert_events_async(events: List[str]) -> dict:
+    """
+    Insert a list of raw JSON event strings into the database.
+
+    This is the ONLY async part of the pipeline. It runs inside
+    asyncio.run() so it gets its own clean event loop — no sharing
+    with any other coroutine.
+    """
+    processor = EventProcessor()
+    try:
+        result = await processor.process_events_batch(events, broadcast=True)
+        return result
+    finally:
+        await processor.close()
+
+
+# ---------------------------------------------------------------------------
+# Celery Tasks
+# ---------------------------------------------------------------------------
 
 @celery_app.task(
     name="app.tasks.tasks_ingest.process_event_batch",
     bind=True,
     max_retries=3,
-    default_retry_delay=60  # Retry after 60 seconds
+    default_retry_delay=60,
 )
 def process_event_batch(self, batch_size: int = 100):
     """
-    Celery task to process events from Redis queue.
-    
-    Args:
-        batch_size: Number of events to process in one batch
-        
-    This task:
-    1. Pulls events from Redis queue
-    2. Batches them together
-    3. Writes to PostgreSQL
-    """
-    loop = asyncio.get_event_loop()
-    return loop.run_until_complete(_process_event_batch_async(batch_size))
+    Pull events from Redis queue and write them to PostgreSQL.
 
+    Flow:
+        1. Sync Redis RPOP  →  list of JSON strings   (sync, correct)
+        2. asyncio.run()    →  async DB bulk insert    (async, isolated)
 
-async def _process_event_batch_async(batch_size: int = 100):
+    No async/sync mixing occurs.
     """
-    Async implementation of event batch processing.
-    """
-    # Connect to Redis
-    redis_client = redis.from_url(
-        settings.REDIS_URL,
-        encoding="utf-8",
-        decode_responses=True
-    )
-    
+    # Step 1 — dequeue (pure sync, uses sync Redis client)
+    events = _dequeue_events(batch_size)
+
+    if not events:
+        logger.debug("process_event_batch: queue is empty, nothing to do")
+        return {"status": "no_events", "processed": 0}
+
+    logger.info(f"process_event_batch: dequeued {len(events)} events")
+
+    # Step 2 — insert (pure async, isolated in its own event loop)
     try:
-        # Pull batch from queue (non-blocking)
-        events = []
-        for _ in range(batch_size):
-            # LPOP removes and returns first element
-            event_json = redis_client.rpop("event_queue")
-            if event_json is None:
-                break  # Queue is empty
-            events.append(event_json)
-        
-        if not events:
-            return {
-                "status": "no_events",
-                "processed": 0
-            }
-        
-        # Process the batch
-        processor = EventProcessor()
-        result = await processor.process_events_batch(events)
-        await processor.close()
-        
-        return {
-            "status": "success",
-            "processed": result["processed"],
-            "failed": result["failed"],
-            "errors": result["errors"],
-            "batch_size": len(events)
-        }
-    
-    except Exception as e:
-        return {
-            "status": "error",
-            "error": str(e)
-        }
-    
-    finally:
-        redis_client.close()
+        result = asyncio.run(_insert_events_async(events))
+    except Exception as exc:
+        logger.error(f"process_event_batch: DB insert failed: {exc}", exc_info=True)
+        # Retry the task; events are already off the queue so we re-push them
+        # back before retrying so they aren't lost.
+        _requeue_events(events)
+        raise self.retry(exc=exc)
+
+    return {
+        "status": "success",
+        "processed": result.get("processed", 0),
+        "failed": result.get("failed", 0),
+        "errors": result.get("errors", []),
+        "batch_size": len(events),
+    }
 
 
 @celery_app.task(
     name="app.tasks.tasks_ingest.consume_queue_continuously",
-    bind=True
+    bind=True,
 )
 def consume_queue_continuously(self, batch_size: int = 100, max_batches: int = 10):
     """
-    Continuously consume events from queue until empty or max_batches reached.
-    
-    This is useful for catching up when queue gets backed up.
-    
-    Args:
-        batch_size: Events per batch
-        max_batches: Maximum number of batches to process
-    """
-    loop = asyncio.get_event_loop()
-    return loop.run_until_complete(
-        _consume_queue_continuously_async(batch_size, max_batches)
-    )
+    Drain the event queue in multiple sequential batches.
 
+    Useful for catch-up after a backlog builds up.
+    Each batch is a separate sync→async cycle with its own event loop,
+    so there is no shared state between batches.
+    """
+    total_processed = 0
+    batches_processed = 0
 
-async def _consume_queue_continuously_async(
-    batch_size: int = 100,
-    max_batches: int = 10
-):
-    """
-    Async implementation of continuous queue consumption.
-    """
+    # Check queue length once with sync client
     redis_client = redis.from_url(
         settings.REDIS_URL,
         encoding="utf-8",
-        decode_responses=True
+        decode_responses=True,
     )
-    
-    processor = EventProcessor()
-    
-    total_processed = 0
-    batches_processed = 0
-    
     try:
-        for _ in range(max_batches):
-            # Check queue length
-            queue_length = redis_client.llen("event_queue")
-            if queue_length == 0:
-                break
-            
-            # Pull batch
-            events = []
-            for _ in range(min(batch_size, queue_length)):
-                event_json = redis_client.lpop("event_queue")
-                if event_json:
-                    events.append(event_json)
-            
-            if not events:
-                break
-            
-            # Process batch
-            result = await processor.process_events_batch(events)
-            total_processed += result["processed"]
+        queue_length = redis_client.llen("event_queue")
+    finally:
+        redis_client.close()
+
+    logger.info(
+        f"consume_queue_continuously: queue has {queue_length} events, "
+        f"will process up to {max_batches} batches of {batch_size}"
+    )
+
+    for batch_num in range(max_batches):
+        # Step 1 — dequeue
+        events = _dequeue_events(batch_size)
+        if not events:
+            logger.info(f"consume_queue_continuously: queue empty after {batch_num} batches")
+            break
+
+        # Step 2 — insert
+        try:
+            result = asyncio.run(_insert_events_async(events))
+            total_processed += result.get("processed", 0)
             batches_processed += 1
-            
-            # Small delay between batches
-            await asyncio.sleep(0.1)
-        
-        await processor.close()
-        
-        return {
-            "status": "completed",
-            "total_processed": total_processed,
-            "batches_processed": batches_processed
-        }
-    
+            logger.info(
+                f"consume_queue_continuously: batch {batch_num + 1} done — "
+                f"{result.get('processed')} inserted"
+            )
+        except Exception as exc:
+            logger.error(
+                f"consume_queue_continuously: batch {batch_num + 1} failed: {exc}",
+                exc_info=True,
+            )
+            _requeue_events(events)
+            break
+
+    return {
+        "status": "completed",
+        "total_processed": total_processed,
+        "batches_processed": batches_processed,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Safety helpers
+# ---------------------------------------------------------------------------
+
+def _requeue_events(events: List[str]) -> None:
+    """
+    Push events back onto the queue head so they aren't lost on task failure.
+    Uses LPUSH so they'll be processed next (LIFO for failed batches).
+    """
+    if not events:
+        return
+
+    redis_client = redis.from_url(
+        settings.REDIS_URL,
+        encoding="utf-8",
+        decode_responses=True,
+    )
+    try:
+        with redis_client.pipeline() as pipe:
+            for event in reversed(events):   # reversed so order is preserved
+                pipe.lpush("event_queue", event)
+            pipe.execute()
+        logger.info(f"_requeue_events: re-queued {len(events)} events")
     except Exception as e:
-        await processor.close()
-        return {
-            "status": "error",
-            "error": str(e),
-            "processed_before_error": total_processed
-        }
-    
+        logger.error(f"_requeue_events: failed to re-queue events: {e}", exc_info=True)
     finally:
         redis_client.close()

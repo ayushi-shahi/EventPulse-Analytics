@@ -1,6 +1,8 @@
 # backend/app/config.py
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import computed_field
 from datetime import timedelta
+
 
 class Settings(BaseSettings):
     # ----------------------------
@@ -42,20 +44,51 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str | None = None
     SMTP_FROM: str | None = None
 
-    
+    # ----------------------------
+    # Sentry (optional)
+    # ----------------------------
     SENTRY_DSN: str | None = None
     SENTRY_ENVIRONMENT: str | None = None
     SENTRY_TRACES_SAMPLE_RATE: float = 0.0
-    
-    
+
     # ----------------------------
-    # ✅ Pydantic v2 config
+    # Pydantic v2 config
     # ----------------------------
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        extra="allow"   # 🔥 THIS FIXES YOUR ERROR
+        extra="allow"
     )
+
+    # ----------------------------
+    # Computed / derived fields
+    # ----------------------------
+    @computed_field
+    @property
+    def sync_database_url(self) -> str:
+        """
+        Synchronous DB URL for Alembic and sync SQLAlchemy usage.
+        Uses DATABASE_URL_SYNC if explicitly set, otherwise derives it
+        from DATABASE_URL by swapping the driver.
+        """
+        if self.DATABASE_URL_SYNC:
+            return self.DATABASE_URL_SYNC
+        return self.DATABASE_URL.replace(
+            "postgresql+asyncpg://",
+            "postgresql://"
+        )
+
+    @computed_field
+    @property
+    def celery_broker(self) -> str:
+        """Celery broker URL — falls back to REDIS_URL if not explicitly set."""
+        return self.CELERY_BROKER_URL or self.REDIS_URL
+
+    @computed_field
+    @property
+    def celery_backend(self) -> str:
+        """Celery result backend — falls back to REDIS_URL if not explicitly set."""
+        return self.CELERY_RESULT_BACKEND or self.REDIS_URL
 
     @property
     def access_token_expire(self) -> timedelta:
@@ -67,12 +100,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-
-# ----------------------------
-# Generate SYNC DB URL automatically if missing
-# ----------------------------
-if settings.DATABASE_URL_SYNC is None:
-    settings.DATABASE_URL_SYNC = settings.DATABASE_URL.replace(
-        "postgresql+asyncpg://",
-        "postgresql://"
-    )

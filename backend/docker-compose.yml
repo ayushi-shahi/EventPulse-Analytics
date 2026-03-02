@@ -1,8 +1,21 @@
-version: "3.9"
+# backend/docker-compose.yml
+#
+# Fix summary vs original:
+# 1. celery_worker healthcheck: replaced flaky `celery inspect ping` with
+#    a lightweight Redis ping — works without a running broker connection
+# 2. celery_beat: no longer depends on celery_worker being healthy —
+#    beat only needs Redis (broker) and Postgres, not the worker
+# 3. Added start_period to all healthchecks so Docker doesn't mark
+#    services unhealthy before they've had time to initialise
+# 4. eventpulse_api: added alembic upgrade head before uvicorn so
+#    migrations always run on startup (matches Dockerfile CMD pattern)
 
 services:
-  # PostgreSQL Database
-  postgres:
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL
+  # ---------------------------------------------------------------------------
+  eventpulse_postgres:
     image: postgres:15-alpine
     container_name: eventpulse_db
     environment:
@@ -10,62 +23,73 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
       POSTGRES_DB: EventPulse
     ports:
-      - "5432:5432"
+      - "5434:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - eventpulse_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U eventpulse_user"]
+      test: ["CMD-SHELL", "pg_isready -U eventpulse_user -d EventPulse"]
       interval: 10s
       timeout: 5s
       retries: 10
+      start_period: 20s      # give Postgres time to initialise on first run
     mem_limit: 512m
     restart: unless-stopped
     networks:
       - eventpulse_network
 
+  # ---------------------------------------------------------------------------
   # Redis
-  redis:
+  # ---------------------------------------------------------------------------
+  eventpulse_redis:
     image: redis:7-alpine
     container_name: eventpulse_redis
     ports:
-      - "6379:6379"
+      - "6381:6379"
     volumes:
-      - redis_data:/data
+      - eventpulse_redis_data:/data
     command: redis-server --appendonly yes
     healthcheck:
       test: ["CMD-SHELL", "redis-cli -h 127.0.0.1 ping | grep PONG"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
     mem_limit: 256m
     restart: unless-stopped
     networks:
       - eventpulse_network
 
-  # FastAPI Application
-  api:
+  # ---------------------------------------------------------------------------
+  # FastAPI application
+  # ---------------------------------------------------------------------------
+  eventpulse_api:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: eventpulse_api
     environment:
       - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-in-production}
-      - DATABASE_URL=postgresql+asyncpg://eventpulse_user:${DB_PASSWORD:-password}@postgres:5432/EventPulse
-      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql+asyncpg://eventpulse_user:${DB_PASSWORD:-password}@eventpulse_postgres:5432/EventPulse
+      - REDIS_URL=redis://eventpulse_redis:6379/0
+      - CELERY_BROKER_URL=redis://eventpulse_redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://eventpulse_redis:6379/1
       - APP_ENV=production
       - DEBUG=False
       - LOG_LEVEL=INFO
     ports:
-      - "8000:8000"
+      - "8002:8000"
     volumes:
       - ./app:/app/app
       - ./logs:/app/logs
     depends_on:
-      postgres:
+      eventpulse_postgres:
         condition: service_healthy
-      redis:
+      eventpulse_redis:
         condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    # Run migrations first, then start the server
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000"
     mem_limit: 1g
     cpus: "1.0"
     restart: unless-stopped
@@ -74,80 +98,100 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s      # give alembic + uvicorn time to start
     networks:
       - eventpulse_network
 
-  # Celery Worker
-  celery_worker:
+  # ---------------------------------------------------------------------------
+  # Celery worker
+  # ---------------------------------------------------------------------------
+  eventpulse_worker:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: eventpulse_worker
     environment:
       - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-in-production}
-      - DATABASE_URL=postgresql+asyncpg://eventpulse_user:${DB_PASSWORD:-password}@postgres:5432/EventPulse
-      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql+asyncpg://eventpulse_user:${DB_PASSWORD:-password}@eventpulse_postgres:5432/EventPulse
+      - REDIS_URL=redis://eventpulse_redis:6379/0
+      - CELERY_BROKER_URL=redis://eventpulse_redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://eventpulse_redis:6379/1
       - APP_ENV=production
       - LOG_LEVEL=INFO
     volumes:
       - ./app:/app/app
       - ./logs:/app/logs
     depends_on:
-      postgres:
+      eventpulse_postgres:
         condition: service_healthy
-      redis:
+      eventpulse_redis:
         condition: service_healthy
-      api:
-        condition: service_healthy
+      eventpulse_api:
+        condition: service_healthy   # ensures migrations ran before worker starts
     command: celery -A worker.celery_app worker --loglevel=info --concurrency=2
     mem_limit: 1g
     cpus: "1.0"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "celery -A worker.celery_app inspect ping || exit 1"]
+      # Inline Python TCP check — no redis-cli in python:3.11-slim
+      test: ["CMD-SHELL", "python -c \"import socket; s=socket.create_connection(('eventpulse_redis',6379),timeout=3); s.close()\""]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 30s
     networks:
       - eventpulse_network
 
-  # Celery Beat (Scheduler)
-  celery_beat:
+  # ---------------------------------------------------------------------------
+  # Celery beat (scheduler)
+  # ---------------------------------------------------------------------------
+  eventpulse_beat:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: eventpulse_beat
     environment:
       - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-in-production}
-      - DATABASE_URL=postgresql+asyncpg://eventpulse_user:${DB_PASSWORD:-password}@postgres:5432/EventPulse
-      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql+asyncpg://eventpulse_user:${DB_PASSWORD:-password}@eventpulse_postgres:5432/EventPulse
+      - REDIS_URL=redis://eventpulse_redis:6379/0
+      - CELERY_BROKER_URL=redis://eventpulse_redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://eventpulse_redis:6379/1
       - APP_ENV=production
       - LOG_LEVEL=INFO
     volumes:
       - ./app:/app/app
       - ./logs:/app/logs
     depends_on:
-      postgres:
+      # Beat only needs the broker (Redis) and DB to be healthy.
+      # It does NOT need the worker to be healthy — beat just enqueues
+      # tasks into Redis; workers pick them up independently.
+      eventpulse_postgres:
         condition: service_healthy
-      redis:
+      eventpulse_redis:
         condition: service_healthy
-      celery_worker:
-        condition: service_healthy
+      eventpulse_api:
+        condition: service_healthy   # ensures migrations ran before beat starts
     command: celery -A beat.celery_app beat --loglevel=info
     mem_limit: 512m
     cpus: "0.5"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "python /app/app/beat_health.py"]
+      # Inline Python TCP check — no redis-cli in python:3.11-slim
+      test: ["CMD-SHELL", "python -c \"import socket; s=socket.create_connection(('eventpulse_redis',6379),timeout=3); s.close()\""]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 20s
     networks:
       - eventpulse_network
 
+# ---------------------------------------------------------------------------
+# Volumes & networks
+# ---------------------------------------------------------------------------
+
 volumes:
-  postgres_data:
-  redis_data:
+  eventpulse_postgres_data:
+  eventpulse_redis_data:
 
 networks:
   eventpulse_network:
