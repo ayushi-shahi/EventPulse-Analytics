@@ -122,17 +122,43 @@ class APIClient {
         data = null;
       }
 
-      // Handle 401 Unauthorized – let callers decide what to do
+      // Handle 401 Unauthorized
       if (response.status === 401) {
         const message = (data && (data.detail || data.message)) || 'Unauthorized';
-        const error = new Error(message);
-        error.status = 401;
-        // Flag API key–related auth errors so callers can react
+
+        // If it's an API key error, let the caller handle it
         if (typeof message === 'string' && message.toLowerCase().includes('api key')) {
+          const error = new Error(message);
+          error.status = 401;
           error.isAPIKeyError = true;
+          throw error;
         }
-        throw error;
+
+        // Otherwise try refreshing the JWT
+        const storedRefresh = localStorage.getItem('refresh_token');
+        if (storedRefresh && !options._isRetry) {
+          try {
+            const refreshRes = await fetch(`${this.baseURL}/auth/refresh`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ refresh_token: storedRefresh }),
+            });
+            if (refreshRes.ok) {
+              const refreshData = await refreshRes.json();
+              this.setToken(refreshData.access_token);
+              localStorage.setItem('refresh_token', refreshData.refresh_token);
+              // Retry original request once with new token
+              return this.request(endpoint, { ...options, _isRetry: true });
+            }
+          } catch {}
+        }
+
+        // Refresh failed or no refresh token — force logout
+        this.removeToken();
+        localStorage.removeItem('refresh_token');
+        window.location.href = '/login';
       }
+      
 
       if (!response.ok) {
         const message = (data && (data.detail || data.message)) || 'Request failed';
@@ -186,6 +212,7 @@ class APIClient {
       body: { email, password },
     });
     this.setToken(data.access_token);
+    localStorage.setItem('refresh_token', data.refresh_token); // ADD THIS
     return data;
   }
 
