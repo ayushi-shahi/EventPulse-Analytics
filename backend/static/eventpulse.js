@@ -87,20 +87,29 @@
   function _flush() {
     if (!_buffer.length) return;
 
-    var events   = _buffer.slice();
-    _buffer      = [];
+    var events = _buffer.slice();
+    _buffer = [];
 
-    var payload  = JSON.stringify({ events: events });
-
-    // Use sendBeacon when available (page unload safe)
-    if (navigator.sendBeacon) {
-      var blob = new Blob([payload], { type: "application/json" });
-      var sent = navigator.sendBeacon(
-        _baseUrl + "/api/v1/ingest/events/batch",
-        blob
-      );
-      if (sent) { _retries = 0; return; }
-    }
+    fetch(_baseUrl + "/api/v1/ingest/events/batch", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": _apiKey,
+      },
+      body: JSON.stringify({ events: events }),
+      keepalive: true,   // handles page unload safely
+    })
+      .then(function (res) {
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        _retries = 0;
+      })
+      .catch(function () {
+        _retries++;
+        if (_retries <= MAX_RETRIES) {
+          _buffer = events.concat(_buffer);
+        }
+      });
+  }
 
     // Fallback: fetch with retry
     fetch(_baseUrl + "/api/v1/ingest/events/batch", {
