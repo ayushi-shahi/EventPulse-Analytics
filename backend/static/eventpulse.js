@@ -97,7 +97,7 @@
         "X-API-Key": _apiKey,
       },
       body: JSON.stringify({ events: events }),
-      keepalive: true,   // handles page unload safely
+      keepalive: true,
     })
       .then(function (res) {
         if (!res.ok) throw new Error("HTTP " + res.status);
@@ -106,29 +106,6 @@
       .catch(function () {
         _retries++;
         if (_retries <= MAX_RETRIES) {
-          _buffer = events.concat(_buffer);
-        }
-      });
-  }
-
-    // Fallback: fetch with retry
-    fetch(_baseUrl + "/api/v1/ingest/events/batch", {
-      method:  "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-Key":    _apiKey,
-      },
-      body:        payload,
-      keepalive:   true,
-    })
-      .then(function (res) {
-        if (!res.ok) throw new Error("HTTP " + res.status);
-        _retries = 0;
-      })
-      .catch(function () {
-        _retries++;
-        if (_retries <= MAX_RETRIES) {
-          // Re-queue failed events
           _buffer = events.concat(_buffer);
         }
       });
@@ -150,7 +127,6 @@
   function _trackClicks() {
     document.addEventListener("click", function (e) {
       var el = e.target;
-      // Walk up to find a meaningful element
       for (var i = 0; i < 5 && el; i++) {
         var tag = el.tagName ? el.tagName.toLowerCase() : "";
         if (tag === "a" || tag === "button" || el.getAttribute("data-track")) {
@@ -170,7 +146,6 @@
 
   function _trackPageLeave() {
     window.addEventListener("beforeunload", _flush);
-    // visibilitychange covers mobile background
     document.addEventListener("visibilitychange", function () {
       if (document.visibilityState === "hidden") _flush();
     });
@@ -195,11 +170,6 @@
   // -------------------------------------------------------------------------
 
   var EventPulse = {
-    /**
-     * Initialise the SDK manually (not needed if using data-api-key attribute).
-     * @param {string} apiKey  Your ep_live_... key
-     * @param {object} options { baseUrl, autoTrack }
-     */
     init: function (apiKey, options) {
       options  = options || {};
       _apiKey  = apiKey;
@@ -217,29 +187,17 @@
       return this;
     },
 
-    /**
-     * Track a custom event.
-     * @param {string} eventName
-     * @param {object} properties
-     */
     track: function (eventName, properties) {
       _push(eventName, properties);
       return this;
     },
 
-    /**
-     * Associate subsequent events with a user ID.
-     * @param {string} userId
-     */
     identify: function (userId) {
       _userId = userId;
       _push("identify", { identified_user_id: userId });
       return this;
     },
 
-    /**
-     * Manually flush the buffer (useful before logout).
-     */
     flush: function () {
       _flush();
       return this;
@@ -251,7 +209,6 @@
   // -------------------------------------------------------------------------
 
   function _detectBaseUrl() {
-    // Try to find the script tag that loaded this file
     var scripts = document.querySelectorAll("script[src*='eventpulse']");
     for (var i = 0; i < scripts.length; i++) {
       var src = scripts[i].src;
@@ -272,10 +229,8 @@
     }
   }
 
-  // Expose globally
   window.EventPulse = EventPulse;
 
-  // Run auto-init after DOM is ready
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", _autoInit);
   } else {
