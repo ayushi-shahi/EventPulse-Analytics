@@ -53,43 +53,38 @@ if settings.SENTRY_DSN:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Manage application lifecycle resources.
-
-    Everything before `yield` runs on startup.
-    Everything after `yield` runs on shutdown.
-    Using a context manager guarantees shutdown always runs,
-    even if startup raises an exception partway through.
-    """
-    # --- Startup ---
     logger.info("EventPulse starting up...")
-
+ 
     await rate_limiter.initialize()
     logger.info("Rate limiter initialised")
-
+ 
     await broadcaster.initialize()
-    # Run the Redis → WebSocket relay in the background
     broadcast_task = asyncio.create_task(broadcaster.subscribe_and_broadcast())
     logger.info("WebSocket broadcaster started")
-
-    logger.info("EventPulse is ready ✅")
-
-    yield   # app is running here
-
-    # --- Shutdown ---
+ 
+    # Start APScheduler (replaces Celery worker + beat)
+    from app.tasks.scheduler import start_scheduler
+    start_scheduler()
+ 
+    logger.info("EventPulse is ready")
+ 
+    yield
+ 
     logger.info("EventPulse shutting down...")
-
+ 
+    from app.tasks.scheduler import stop_scheduler
+    stop_scheduler()
+ 
     broadcast_task.cancel()
     try:
         await broadcast_task
     except asyncio.CancelledError:
-        pass  # expected
-
+        pass
+ 
     await broadcaster.close()
     await rate_limiter.close()
-
+ 
     logger.info("EventPulse shutdown complete")
-
 
 # ---------------------------------------------------------------------------
 # App
