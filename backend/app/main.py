@@ -22,6 +22,8 @@ from app.api.v1 import auth, api_keys, ingest, metrics, alerts, admin, websocket
 from app.core.rate_limiter import rate_limiter
 from app.services.websocket_broadcaster import broadcaster
 from app.logging_config import setup_logging, get_logger
+from fastapi.staticfiles import StaticFiles
+
 
 # ---------------------------------------------------------------------------
 # Logging (must be first)
@@ -98,6 +100,9 @@ app = FastAPI(
     lifespan=lifespan,          # ← modern approach
 )
 
+import os
+os.makedirs("static", exist_ok=True)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 # ---------------------------------------------------------------------------
 # Middleware
 # ---------------------------------------------------------------------------
