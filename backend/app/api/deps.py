@@ -55,6 +55,7 @@ async def get_api_key(
 
     # --- Hash and query directly — single indexed lookup ---
     key_hash = hash_api_key(api_key_value)
+    print(f"DEBUG hash: {key_hash}") 
 
     result = await db.execute(
         select(APIKey).where(
