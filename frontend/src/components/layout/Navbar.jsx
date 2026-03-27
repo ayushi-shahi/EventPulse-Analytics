@@ -95,8 +95,8 @@ const Navbar = ({ onMenuClick }) => {
 
             {showNotifications && (
               <>
-                <div className="fixed inset-0 z-40" onClick={() => setShowNotifications(false)} />
-                <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                <div className="fixed inset-0 z-99" onClick={() => setShowNotifications(false)} />
+                <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-[100]">
                   <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
                     <p className="text-sm font-semibold text-gray-900">Notifications</p>
                     {items.length > 0 && (
