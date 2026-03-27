@@ -2,37 +2,6 @@
 
 > A self-hosted, real-time analytics platform — like a mini Mixpanel or Google Analytics — that you own and deploy yourself.
 
-[![Backend](https://img.shields.io/badge/backend-FastAPI-009688?style=flat-square&logo=fastapi)](https://eventpulse-analytics-backend.onrender.com/)
-[![Frontend](https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB?style=flat-square&logo=react)](https://www.npmjs.com/package/eventpulse-analytics)
-[![npm](https://img.shields.io/npm/v/eventpulse-analytics?style=flat-square&color=CB3837&logo=npm)](https://www.npmjs.com/package/eventpulse-analytics)
-[![PyPI](https://img.shields.io/pypi/v/eventpulse-python?style=flat-square&color=3776AB&logo=python)](https://pypi.org/project/eventpulse-python/1.0.0/)
-[![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://claude.ai/chat/LICENSE)
-
----
-
-## Table of Contents
-
-* [Overview](https://claude.ai/chat/ae3fc84a-960c-4de3-b0a1-d188d272ee27#overview)
-* [Live Demo](https://claude.ai/chat/ae3fc84a-960c-4de3-b0a1-d188d272ee27#live-demo)
-* [Features](https://claude.ai/chat/ae3fc84a-960c-4de3-b0a1-d188d272ee27#features)
-* [Architecture](https://claude.ai/chat/ae3fc84a-960c-4de3-b0a1-d188d272ee27#architecture)
-* [Tech Stack](https://claude.ai/chat/ae3fc84a-960c-4de3-b0a1-d188d272ee27#tech-stack)
-* [Getting Started](https://claude.ai/chat/ae3fc84a-960c-4de3-b0a1-d188d272ee27#getting-started)
-  * [Prerequisites](https://claude.ai/chat/ae3fc84a-960c-4de3-b0a1-d188d272ee27#prerequisites)
-  * [Local Development](https://claude.ai/chat/ae3fc84a-960c-4de3-b0a1-d188d272ee27#local-development)
-  * [Environment Variables](https://claude.ai/chat/ae3fc84a-960c-4de3-b0a1-d188d272ee27#environment-variables)
-* [SDKs &amp; Integration](https://claude.ai/chat/ae3fc84a-960c-4de3-b0a1-d188d272ee27#sdks--integration)
-  * [Plain HTML — Drop-in Script](https://claude.ai/chat/ae3fc84a-960c-4de3-b0a1-d188d272ee27#plain-html--drop-in-script)
-  * [React / TypeScript](https://claude.ai/chat/ae3fc84a-960c-4de3-b0a1-d188d272ee27#react--typescript)
-  * [Vue 3](https://claude.ai/chat/ae3fc84a-960c-4de3-b0a1-d188d272ee27#vue-3)
-  * [Python — Plain](https://claude.ai/chat/ae3fc84a-960c-4de3-b0a1-d188d272ee27#python--plain)
-  * [Python — Django](https://claude.ai/chat/ae3fc84a-960c-4de3-b0a1-d188d272ee27#python--django)
-  * [Python — FastAPI](https://claude.ai/chat/ae3fc84a-960c-4de3-b0a1-d188d272ee27#python--fastapi)
-* [API Reference](https://claude.ai/chat/ae3fc84a-960c-4de3-b0a1-d188d272ee27#api-reference)
-* [Deployment](https://claude.ai/chat/ae3fc84a-960c-4de3-b0a1-d188d272ee27#deployment)
-* [Project Structure](https://claude.ai/chat/ae3fc84a-960c-4de3-b0a1-d188d272ee27#project-structure)
-* [Contributing](https://claude.ai/chat/ae3fc84a-960c-4de3-b0a1-d188d272ee27#contributing)
-
 ---
 
 ## Overview
@@ -284,7 +253,7 @@ EventPulse.identify('user_123')
 EventPulse.flush()
 ```
 
-📄 [Full HTML quick start guide](https://claude.ai/chat/docs/quick-start-html.md)
+📄 [Full HTML quick start guide](docs/quick-start-html.md)
 
 ---
 
@@ -316,7 +285,7 @@ track('button_click', { button: 'signup', plan: 'pro' })
 identify('user_123')
 ```
 
-📄 [Full React quick start guide](https://claude.ai/chat/docs/quick-start-react.md)
+📄 [Full React quick start guide](docs/quick-start-react.md)
 
 ---
 
@@ -345,7 +314,7 @@ eventpulse.track('page_view', { page: 'home' })
 </script>
 ```
 
-📄 [Full Vue quick start guide](https://claude.ai/chat/docs/quick-start-vue.md)
+📄 [Full Vue quick start guide](docs/quick-start-vue.md)
 
 ---
 
@@ -368,7 +337,7 @@ ep.identify("user_123")
 ep.shutdown()  # flushes remaining events before exit
 ```
 
-📄 [Full Python quick start guide](https://claude.ai/chat/docs/quick-start-python.md)
+📄 [Full Python quick start guide](/docs/quick-start-python.md)
 
 ---
 
@@ -391,7 +360,7 @@ EVENTPULSE_ENDPOINT = 'https://eventpulse-analytics-backend.onrender.com'
 
 Auto-tracks every request as `page_view` and auto-identifies authenticated users.
 
-📄 [Full Django quick start guide](https://claude.ai/chat/docs/quick-start-django.md)
+📄 [Full Django quick start guide](/docs/quick-start-django.md)
 
 ---
 
@@ -414,7 +383,7 @@ app.add_middleware(
 )
 ```
 
-📄 [Full FastAPI quick start guide](https://claude.ai/chat/docs/quick-start-fastapi.md)
+📄 [Full FastAPI quick start guide](/docs/quick-start-fastapi.md)
 
 ---
 
