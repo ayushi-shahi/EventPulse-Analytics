@@ -448,3 +448,50 @@ All endpoints are prefixed with `/api/v1/`.
 | ⏳ Documentation             | Quick start guides for plain HTML, React, Vue, Python                                                        |
 | ⏳ npm package GitHub commit | Commit `eventpulse-analytics/`folder to the repository                                                     |
 | ⏳ Test app cleanup          | Delete or gitignore `eventpulse-test-app/`(was for local testing only)                                     |
+
+
+## **The flow from their side:**
+
+**1. They sign up on your EventPulse platform**
+Go to your Vercel URL → Register → Login
+
+**2. They create an API key**
+Go to API Keys page → Create New Key → copy `ep_live_xxx`
+
+**3. They install your package in their project**
+
+bash
+
+```bash
+npminstall eventpulse-analytics
+```
+
+**4. They open their own `main.jsx` and add your provider**
+
+jsx
+
+```jsx
+import{EventPulseProvider}from'eventpulse-analytics'
+```
+
+This works because the package is on npm — just like importing `react` or `axios`.
+
+**5. They wrap their app — one time, done**
+
+jsx
+
+```jsx
+<EventPulseProvider
+apiKey="ep_live_THEIR_OWN_KEY"
+endpoint="https://eventpulse-analytics-backend.onrender.com"
+>
+<App/>
+</EventPulseProvider>
+```
+
+**6. They log into EventPulse dashboard and see their app's data**
+
+---
+
+**The analogy:**
+It's exactly like Google Analytics — you get a tracking ID, paste one snippet, and data starts flowing. Your npm package is that snippet, just for React apps.
