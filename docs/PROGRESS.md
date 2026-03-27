@@ -1,19 +1,19 @@
 # EventPulse — Project Progress
 
-> **Status:** ✅ Backend Complete · ✅ Frontend Complete · ✅ Deployed · ✅ JS SDK Live · ✅ npm Package Published · ✅ Python SDK Published
+> **Status:** ✅ Backend Complete · ✅ Frontend Complete · ✅ Deployed · ✅ JS SDK Live · ✅ npm Package Published · ✅ Python SDK Published · ✅ Documentation Complete
 
 ---
 
 ## Table of Contents
 
-* [Project Milestones](https://claude.ai/chat/55489d42-8eba-4336-b484-95779f3a4dc3#project-milestones)
-* [Database Migrations](https://claude.ai/chat/55489d42-8eba-4336-b484-95779f3a4dc3#database-migrations)
-* [API Endpoint Inventory](https://claude.ai/chat/55489d42-8eba-4336-b484-95779f3a4dc3#api-endpoint-inventory)
-* [Security &amp; Middleware](https://claude.ai/chat/55489d42-8eba-4336-b484-95779f3a4dc3#security--middleware)
-* [Frontend Architecture](https://claude.ai/chat/55489d42-8eba-4336-b484-95779f3a4dc3#frontend-architecture)
-* [SDK Architecture](https://claude.ai/chat/55489d42-8eba-4336-b484-95779f3a4dc3#sdk-architecture)
-* [Completed Features](https://claude.ai/chat/55489d42-8eba-4336-b484-95779f3a4dc3#completed-features)
-* [Pending](https://claude.ai/chat/55489d42-8eba-4336-b484-95779f3a4dc3#pending)
+* [Project Milestones](https://claude.ai/chat/ae3fc84a-960c-4de3-b0a1-d188d272ee27#project-milestones)
+* [Database Migrations](https://claude.ai/chat/ae3fc84a-960c-4de3-b0a1-d188d272ee27#database-migrations)
+* [API Endpoint Inventory](https://claude.ai/chat/ae3fc84a-960c-4de3-b0a1-d188d272ee27#api-endpoint-inventory)
+* [Security &amp; Middleware](https://claude.ai/chat/ae3fc84a-960c-4de3-b0a1-d188d272ee27#security--middleware)
+* [Frontend Architecture](https://claude.ai/chat/ae3fc84a-960c-4de3-b0a1-d188d272ee27#frontend-architecture)
+* [SDK Architecture](https://claude.ai/chat/ae3fc84a-960c-4de3-b0a1-d188d272ee27#sdk-architecture)
+* [Completed Features](https://claude.ai/chat/ae3fc84a-960c-4de3-b0a1-d188d272ee27#completed-features)
+* [Pending](https://claude.ai/chat/ae3fc84a-960c-4de3-b0a1-d188d272ee27#pending)
 
 ---
 
@@ -257,6 +257,18 @@
 * [X] PyPI page live at `https://pypi.org/project/eventpulse-python/1.0.0/`
 * [X] `eventpulse-python/` committed to GitHub repository
 
+### Phase 27 — Documentation
+
+* [X] `docs/` directory created and committed to GitHub
+* [X] `docs/README.md` — documentation index linking all quick start guides
+* [X] `docs/quick-start-html.md` — plain HTML drop-in script guide
+* [X] `docs/quick-start-react.md` — React + TypeScript integration guide
+* [X] `docs/quick-start-vue.md` — Vue 3 plugin integration guide
+* [X] `docs/quick-start-python.md` — plain Python client guide
+* [X] `docs/quick-start-django.md` — Django middleware guide
+* [X] `docs/quick-start-fastapi.md` — FastAPI middleware guide
+* [X] All 7 files committed and pushed (`14debfb`) — `git commit -m "docs: add quick start guides for all SDKs"`
+
 ---
 
 ## SDK Architecture
@@ -289,6 +301,15 @@ eventpulse-python/             # PyPI package (Python)
 └── pyproject.toml
 
 backend/static/eventpulse.js   # Drop-in JS snippet (no install needed)
+
+docs/                          # Quick start guides
+├── README.md                  # Docs index
+├── quick-start-html.md
+├── quick-start-react.md
+├── quick-start-vue.md
+├── quick-start-python.md
+├── quick-start-django.md
+└── quick-start-fastapi.md
 ```
 
 ### Usage — React
@@ -488,14 +509,24 @@ All endpoints are prefixed with `/api/v1/`.
 * [X] npm package (`eventpulse-analytics` v1.0.0) — React + Vue + TypeScript, published to npm
 * [X] Python SDK (`eventpulse-python` v1.0.0) — Django + FastAPI + plain Python, published to PyPI
 
+### Documentation
+
+* [X] `docs/` directory with 7 quick start guides committed to GitHub
+* [X] Covers all integration paths: plain HTML, React, Vue, Python, Django, FastAPI
+
 ---
 
 ## Pending
 
-| Item             | Description                                           |
-| ---------------- | ----------------------------------------------------- |
-| ⏳ Documentation | Quick start guides for plain HTML, React, Vue, Python |
-| ⏳ Root README   | Update root `README.md`to reference all three SDKs  |
+> 🎉 All planned features and documentation are complete. The items below are optional future improvements.
+
+| Item               | Description                                                      | Priority |
+| ------------------ | ---------------------------------------------------------------- | -------- |
+| 🔒 CORS hardening  | Replace `allow_origins=["*"]`with explicit origin allowlist    | Medium   |
+| 📊 Funnel analysis | Multi-step event funnel visualization on the dashboard           | Low      |
+| 🔔 Webhook alerts  | Send alert notifications to a user-configured webhook URL        | Low      |
+| 📦 SDK v1.1.0      | Ship `usePageView()`auto-tracking as default in React provider | Low      |
+| 🧪 E2E tests       | Playwright tests covering login → ingest → dashboard flow      | Low      |
 
 ---
 
