@@ -1,19 +1,19 @@
 # EventPulse — Project Progress
 
-> **Status:** ✅ Backend Complete · ✅ Frontend Complete · ✅ Deployed · ✅ JS SDK Live · ✅ npm Package Published
+> **Status:** ✅ Backend Complete · ✅ Frontend Complete · ✅ Deployed · ✅ JS SDK Live · ✅ npm Package Published · ✅ Python SDK Published
 
 ---
 
 ## Table of Contents
 
-* [Project Milestones](https://claude.ai/chat/81554cf9-fe06-4ae8-9355-58e00aaf9443#project-milestones)
-* [Database Migrations](https://claude.ai/chat/81554cf9-fe06-4ae8-9355-58e00aaf9443#database-migrations)
-* [API Endpoint Inventory](https://claude.ai/chat/81554cf9-fe06-4ae8-9355-58e00aaf9443#api-endpoint-inventory)
-* [Security &amp; Middleware](https://claude.ai/chat/81554cf9-fe06-4ae8-9355-58e00aaf9443#security--middleware)
-* [Frontend Architecture](https://claude.ai/chat/81554cf9-fe06-4ae8-9355-58e00aaf9443#frontend-architecture)
-* [SDK Architecture](https://claude.ai/chat/81554cf9-fe06-4ae8-9355-58e00aaf9443#sdk-architecture)
-* [Completed Features](https://claude.ai/chat/81554cf9-fe06-4ae8-9355-58e00aaf9443#completed-features)
-* [Pending](https://claude.ai/chat/81554cf9-fe06-4ae8-9355-58e00aaf9443#pending)
+* [Project Milestones](https://claude.ai/chat/55489d42-8eba-4336-b484-95779f3a4dc3#project-milestones)
+* [Database Migrations](https://claude.ai/chat/55489d42-8eba-4336-b484-95779f3a4dc3#database-migrations)
+* [API Endpoint Inventory](https://claude.ai/chat/55489d42-8eba-4336-b484-95779f3a4dc3#api-endpoint-inventory)
+* [Security &amp; Middleware](https://claude.ai/chat/55489d42-8eba-4336-b484-95779f3a4dc3#security--middleware)
+* [Frontend Architecture](https://claude.ai/chat/55489d42-8eba-4336-b484-95779f3a4dc3#frontend-architecture)
+* [SDK Architecture](https://claude.ai/chat/55489d42-8eba-4336-b484-95779f3a4dc3#sdk-architecture)
+* [Completed Features](https://claude.ai/chat/55489d42-8eba-4336-b484-95779f3a4dc3#completed-features)
+* [Pending](https://claude.ai/chat/55489d42-8eba-4336-b484-95779f3a4dc3#pending)
 
 ---
 
@@ -234,27 +234,61 @@
 * [X] React and Vue declared as peer dependencies (not bundled)
 * [X] Tested locally via `npm link` against a Vite React test app
 * [X] Events confirmed arriving in EventPulse Live Feed from test app
+* [X] `README.md` written with full usage docs for React, Vue, plain JS, and drop-in script
 * [X] **Published to npm** — `npm install eventpulse-analytics` works globally
 * [X] npm page live at `https://www.npmjs.com/package/eventpulse-analytics`
+* [X] `eventpulse-analytics/` committed to GitHub repository
+* [X] `eventpulse-test-app/` deleted / gitignored (was for local testing only)
+
+### Phase 26 — Python SDK (`eventpulse-python`)
+
+* [X] Package scaffolded at `eventpulse-python/` in project root
+* [X] `eventpulse/client.py` — `EventPulseClient` class with `track()`, `identify()`, `page()`, `flush()`, `shutdown()`
+* [X] Background thread flusher — non-blocking, flushes every 5s (mirrors JS `setInterval`)
+* [X] Exponential back-off retry logic (up to 3 attempts) with re-queue on total failure
+* [X] `eventpulse/django.py` — `EventPulseMiddleware` for Django; auto-tracks every request as `page_view`; auto-identifies authenticated users
+* [X] `eventpulse/fastapi.py` — `EventPulseMiddleware` for FastAPI/Starlette; auto-tracks every request as `page_view`
+* [X] Zero runtime dependencies — stdlib only (`urllib`, `threading`, `json`)
+* [X] Context manager support (`with EventPulseClient(...) as ep:`)
+* [X] `pyproject.toml` with optional extras: `django`, `fastapi`, `dev`
+* [X] 11 unit tests — all passing (`pytest tests/ -v`)
+* [X] `README.md` written with full usage docs for plain Python, Django, and FastAPI
+* [X] **Published to PyPI** — `pip install eventpulse-python` works globally
+* [X] PyPI page live at `https://pypi.org/project/eventpulse-python/1.0.0/`
+* [X] `eventpulse-python/` committed to GitHub repository
 
 ---
 
 ## SDK Architecture
 
 ```
-eventpulse-analytics/
+eventpulse-analytics/          # npm package (JS/TS)
 ├── src/
-│   ├── core.ts               # EventPulseClient — batching, flush, retry, identify
+│   ├── core.ts                # EventPulseClient — batching, flush, retry, identify
 │   ├── react/
-│   │   ├── provider.tsx      # <EventPulseProvider apiKey endpoint>
-│   │   └── hooks.ts          # useEventPulse(), usePageView()
+│   │   ├── provider.tsx       # <EventPulseProvider apiKey endpoint>
+│   │   └── hooks.ts           # useEventPulse(), usePageView()
 │   ├── vue/
-│   │   └── plugin.ts         # app.use(EventPulsePlugin, { apiKey, endpoint })
-│   └── index.ts              # All exports
-├── dist/                     # Built output (ESM + UMD + .d.ts)
+│   │   └── plugin.ts          # app.use(EventPulsePlugin, { apiKey, endpoint })
+│   └── index.ts               # All exports
+├── dist/                      # Built output (ESM + UMD + .d.ts)
+├── README.md
 ├── package.json
 ├── vite.config.ts
 └── tsconfig.json
+
+eventpulse-python/             # PyPI package (Python)
+├── eventpulse/
+│   ├── __init__.py            # EventPulseClient export
+│   ├── client.py              # Core — background thread, batching, retry
+│   ├── django.py              # Django middleware
+│   └── fastapi.py             # FastAPI/Starlette middleware
+├── tests/
+│   └── test_client.py         # 11 unit tests
+├── README.md
+└── pyproject.toml
+
+backend/static/eventpulse.js   # Drop-in JS snippet (no install needed)
 ```
 
 ### Usage — React
@@ -279,6 +313,21 @@ track('button_click', { button: 'signup' })
 import { EventPulsePlugin } from 'eventpulse-analytics'
 app.use(EventPulsePlugin, { apiKey: 'ep_live_xxx', endpoint: 'https://...' })
 // In components: this.$eventpulse.track('event_name')
+```
+
+### Usage — Python (Django)
+
+```python
+# settings.py
+MIDDLEWARE = ['eventpulse.django.EventPulseMiddleware', ...]
+EVENTPULSE_API_KEY = 'ep_live_xxx'
+```
+
+### Usage — Python (FastAPI)
+
+```python
+from eventpulse.fastapi import EventPulseMiddleware
+app.add_middleware(EventPulseMiddleware, api_key='ep_live_xxx')
 ```
 
 ### Usage — Plain HTML
@@ -437,20 +486,20 @@ All endpoints are prefixed with `/api/v1/`.
 
 * [X] JS drop-in snippet (`eventpulse.js`) — hosted on Render, tested on live site
 * [X] npm package (`eventpulse-analytics` v1.0.0) — React + Vue + TypeScript, published to npm
+* [X] Python SDK (`eventpulse-python` v1.0.0) — Django + FastAPI + plain Python, published to PyPI
 
 ---
 
 ## Pending
 
-| Item                         | Description                                                                                                  |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| ⏳ Python SDK                | `pip install eventpulse-python`—`track()`with background thread batch flush for Django/FastAPI backends |
-| ⏳ Documentation             | Quick start guides for plain HTML, React, Vue, Python                                                        |
-| ⏳ npm package GitHub commit | Commit `eventpulse-analytics/`folder to the repository                                                     |
-| ⏳ Test app cleanup          | Delete or gitignore `eventpulse-test-app/`(was for local testing only)                                     |
+| Item             | Description                                           |
+| ---------------- | ----------------------------------------------------- |
+| ⏳ Documentation | Quick start guides for plain HTML, React, Vue, Python |
+| ⏳ Root README   | Update root `README.md`to reference all three SDKs  |
 
+---
 
-## **The flow from their side:**
+## How It Works — The User Flow
 
 **1. They sign up on your EventPulse platform**
 Go to your Vercel URL → Register → Login
@@ -460,38 +509,34 @@ Go to API Keys page → Create New Key → copy `ep_live_xxx`
 
 **3. They install your package in their project**
 
-bash
-
 ```bash
-npminstall eventpulse-analytics
+# JavaScript / TypeScript
+npm install eventpulse-analytics
+
+# Python
+pip install eventpulse-python
 ```
 
-**4. They open their own `main.jsx` and add your provider**
-
-jsx
+**4. They add your provider / middleware — one time, done**
 
 ```jsx
-import{EventPulseProvider}from'eventpulse-analytics'
-```
+// React
+import { EventPulseProvider } from 'eventpulse-analytics'
 
-This works because the package is on npm — just like importing `react` or `axios`.
-
-**5. They wrap their app — one time, done**
-
-jsx
-
-```jsx
-<EventPulseProvider
-apiKey="ep_live_THEIR_OWN_KEY"
-endpoint="https://eventpulse-analytics-backend.onrender.com"
->
-<App/>
+<EventPulseProvider apiKey="ep_live_THEIR_KEY" endpoint="https://eventpulse-analytics-backend.onrender.com">
+  <App />
 </EventPulseProvider>
 ```
 
-**6. They log into EventPulse dashboard and see their app's data**
+```python
+# Django — settings.py
+MIDDLEWARE = ['eventpulse.django.EventPulseMiddleware', ...]
+EVENTPULSE_API_KEY = 'ep_live_THEIR_KEY'
+```
+
+**5. They log into EventPulse dashboard and see their app's data**
 
 ---
 
 **The analogy:**
-It's exactly like Google Analytics — you get a tracking ID, paste one snippet, and data starts flowing. Your npm package is that snippet, just for React apps.
+It's exactly like Google Analytics — you get a tracking ID, paste one snippet, and data starts flowing. Your npm and PyPI packages are that snippet, for React/Vue and Python apps respectively.
