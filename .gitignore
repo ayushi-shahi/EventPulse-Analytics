@@ -60,3 +60,5 @@ alembic/versions/__pycache__/
 
 # Temporary test files
 test_*.py
+
+.env.test

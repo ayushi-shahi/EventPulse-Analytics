@@ -4,6 +4,7 @@ import { AuthProvider } from './context/AuthContext';
 import { WebSocketProvider } from './context/WebSocketContext';
 import { NotificationProvider } from './context/NotificationContext';
 import { APIKeyProvider } from './context/APIKeyContext';
+import { BellProvider } from './context/BellContext';  // ← ADD
 
 // Layout
 import Layout from './components/layout/Layout';
@@ -18,47 +19,32 @@ import LiveFeed from './pages/LiveFeed';
 import Events from './pages/Events';
 import Alerts from './pages/Alerts';
 
-/**
- * Main Application Component
- */
 function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
         <NotificationProvider>
-          <APIKeyProvider>
-            <WebSocketProvider>
-              <Routes>
-                {/* Public Routes */}
-                <Route path="/login" element={<Login />} />
-                <Route path="/register" element={<Register />} />
-
-                {/* Protected Routes */}
-                <Route
-                  path="/"
-                  element={
-                    <ProtectedRoute>
-                      <Layout />
-                    </ProtectedRoute>
-                  }
-                >
-                  {/* Use a relative redirect here to avoid
-                      React Router v7 relativeSplatPath deprecation warnings */}
-                  <Route index element={<Navigate to="dashboard" replace />} />
-                  <Route path="dashboard" element={<Dashboard />} />
-                  <Route path="api-keys" element={<APIKeys />} />
-                  <Route path="live-feed" element={<LiveFeed />} />
-                  <Route path="events" element={<Events />} />
-                  <Route path="alerts" element={<Alerts />} />
-                  <Route path="metrics" element={<Dashboard />} />
-                  <Route path="settings" element={<Dashboard />} />
-                </Route>
-
-                {/* 404 - Redirect to dashboard */}
-                <Route path="*" element={<Navigate to="/dashboard" replace />} />
-              </Routes>
-            </WebSocketProvider>
-          </APIKeyProvider>
+          <BellProvider>  {/* ← ADD */}
+            <APIKeyProvider>
+              <WebSocketProvider>
+                <Routes>
+                  <Route path="/login" element={<Login />} />
+                  <Route path="/register" element={<Register />} />
+                  <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+                    <Route index element={<Navigate to="dashboard" replace />} />
+                    <Route path="dashboard" element={<Dashboard />} />
+                    <Route path="api-keys" element={<APIKeys />} />
+                    <Route path="live-feed" element={<LiveFeed />} />
+                    <Route path="events" element={<Events />} />
+                    <Route path="alerts" element={<Alerts />} />
+                    <Route path="metrics" element={<Dashboard />} />
+                    <Route path="settings" element={<Dashboard />} />
+                  </Route>
+                  <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                </Routes>
+              </WebSocketProvider>
+            </APIKeyProvider>
+          </BellProvider>  {/* ← ADD */}
         </NotificationProvider>
       </AuthProvider>
     </BrowserRouter>
