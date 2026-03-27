@@ -4,7 +4,7 @@ import { AuthProvider } from './context/AuthContext';
 import { WebSocketProvider } from './context/WebSocketContext';
 import { NotificationProvider } from './context/NotificationContext';
 import { APIKeyProvider } from './context/APIKeyContext';
-import { BellProvider } from './context/BellContext';  // ← ADD
+import { BellProvider } from './context/BellContext'; 
 
 // Layout
 import Layout from './components/layout/Layout';
@@ -24,7 +24,7 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <NotificationProvider>
-          <BellProvider>  {/* ← ADD */}
+          <BellProvider>  
             <APIKeyProvider>
               <WebSocketProvider>
                 <Routes>
@@ -44,7 +44,7 @@ function App() {
                 </Routes>
               </WebSocketProvider>
             </APIKeyProvider>
-          </BellProvider>  {/* ← ADD */}
+          </BellProvider> 
         </NotificationProvider>
       </AuthProvider>
     </BrowserRouter>
