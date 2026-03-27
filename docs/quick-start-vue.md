@@ -36,7 +36,7 @@ import { inject } from 'vue'
 const ep = inject('eventpulse')
 
 function onSignup() {
-  ep.identify('user_123')
+  try { ep.identify('user_123') } catch {}
   ep.track('signup_clicked', { plan: 'pro' })
 }
 </script>
@@ -52,12 +52,18 @@ function onSignup() {
 export default {
   methods: {
     onSignup() {
-      this.$eventpulse.identify('user_123')
+      try { this.$eventpulse.identify('user_123') } catch {}
       this.$eventpulse.track('signup_clicked', { plan: 'pro' })
     }
   }
 }
 ```
+
+> **Note:** Wrap `identify()` in a `try/catch` when calling it inside async handlers or mutation callbacks. This prevents a crash if the plugin hasn't fully initialized at the time of the call:
+>
+> ```js
+> try { ep.identify(userId) } catch {}
+> ```
 
 ## Full API
 

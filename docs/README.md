@@ -17,7 +17,7 @@
 
 | Service              | URL                                                                        |
 | -------------------- | -------------------------------------------------------------------------- |
-| Frontend (Vercel)    | Your Vercel URL                                                            |
+| Frontend (Vercel)    | `https://event-pulse-analytics-frontend.vercel.app`                      |
 | Backend API (Render) | `https://eventpulse-analytics-backend.onrender.com`                      |
 | JS Drop-in SDK       | `https://eventpulse-analytics-backend.onrender.com/static/eventpulse.js` |
 | npm package          | `https://www.npmjs.com/package/eventpulse-analytics`                     |

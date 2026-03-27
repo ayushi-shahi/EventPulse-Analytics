@@ -37,13 +37,19 @@ export default function SignupButton() {
   const { track, identify } = useEventPulse()
 
   const handleClick = () => {
-    identify('user_123')
+    try { identify('user_123') } catch {}
     track('signup_clicked', { plan: 'pro', source: 'hero' })
   }
 
   return <button onClick={handleClick}>Get Started</button>
 }
 ```
+
+> **Note:** Wrap `identify()` in a `try/catch` when calling it inside mutation callbacks or async handlers (e.g. after a login API call). This prevents a crash if the provider hasn't fully initialized at the time of the call:
+>
+> ```js
+> try { identify(user.id) } catch {}
+> ```
 
 ## Step 4 — Auto-Track Page Views (SPA)
 
@@ -74,7 +80,7 @@ page('/dashboard')                       // manual page view
 
 | Prop              | Type        | Default  | Description                     |
 | ----------------- | ----------- | -------- | ------------------------------- |
-| `apiKey`        | `string`  | required | Your `ep_live_*`key           |
+| `apiKey`        | `string`  | required | Your `ep_live_*` key          |
 | `endpoint`      | `string`  | required | Backend URL                     |
 | `batchInterval` | `number`  | `5000` | Flush interval in ms            |
 | `autoTrack`     | `boolean` | `true` | Auto page view + click tracking |
