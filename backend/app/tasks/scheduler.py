@@ -22,6 +22,7 @@ def start_scheduler():
         compute_minute_aggregates,
         compute_hourly_aggregates,
         cleanup_old_aggregates,
+        cleanup_old_events,
     )
     from app.tasks.tasks_alerts import evaluate_alerts
 
@@ -31,6 +32,7 @@ def start_scheduler():
     scheduler.add_job(compute_minute_aggregates, IntervalTrigger(seconds=60),    id="min_agg",   replace_existing=True, **defaults)
     scheduler.add_job(compute_hourly_aggregates, IntervalTrigger(seconds=3600),  id="hour_agg",  replace_existing=True, **defaults)
     scheduler.add_job(cleanup_old_aggregates,    IntervalTrigger(seconds=86400), id="cleanup",   replace_existing=True, **defaults)
+    scheduler.add_job(cleanup_old_events,        IntervalTrigger(seconds=86400), id="evt_clean", replace_existing=True, **defaults)
     scheduler.add_job(evaluate_alerts,           IntervalTrigger(seconds=60),    id="alerts",    replace_existing=True, **defaults)
 
     scheduler.start()

@@ -7,10 +7,11 @@ No Celery, no asyncio.run(). Async functions called directly.
 import logging
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, text
 
 from app.models.api_key import APIKey
 from app.models.aggregate import Aggregate
+from app.models.event import Event
 from app.services.metrics_service import MetricsService
 from app.database import AsyncSessionLocal
 
@@ -115,3 +116,45 @@ async def cleanup_old_aggregates(days_to_keep: int = 30):
         except Exception as e:
             await db.rollback()
             logger.error(f"Cleanup failed: {e}", exc_info=True)
+
+
+async def cleanup_old_events(days_to_keep: int = 90):
+    """
+    Delete raw events older than `days_to_keep` days. Runs daily.
+
+    Aggregates were already pruned on a schedule, but the events table grew
+    without bound. Rolling demo traffic adds roughly 1,700 rows a day, which
+    fills a free-tier database inside a year — and a full database takes the
+    whole platform down. Aggregates outlive the raw rows they were computed
+    from, so historical charts survive the deletion.
+
+    Deletes in chunks so a large backlog cannot hold one long transaction open
+    against a small instance.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days_to_keep)
+    logger.info(f"Cleaning events older than {cutoff}")
+
+    total = 0
+    async with AsyncSessionLocal() as db:
+        try:
+            while True:
+                result = await db.execute(
+                    text(
+                        """
+                        DELETE FROM events
+                        WHERE id IN (
+                            SELECT id FROM events WHERE event_time < :cutoff LIMIT 5000
+                        )
+                        """
+                    ),
+                    {"cutoff": cutoff},
+                )
+                await db.commit()
+                deleted = result.rowcount or 0
+                total += deleted
+                if deleted < 5000:
+                    break
+            logger.info(f"Deleted {total} old event rows")
+        except Exception as e:
+            await db.rollback()
+            logger.error(f"Event cleanup failed: {e}", exc_info=True)

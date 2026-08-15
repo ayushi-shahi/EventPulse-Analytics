@@ -1,0 +1,60 @@
+name: Demo traffic
+
+# Keeps the public demo dashboard showing recent activity between real visits,
+# and incidentally keeps the free-tier API warm so a visitor does not wait
+# through a cold start.
+#
+# Hourly rather than daily on purpose: the dashboard's default "Last hour" and
+# "Last 24 hours" views are empty unless something arrived recently, and a
+# single daily burst would show up as one spike rather than a trend.
+
+on:
+  schedule:
+    # Every hour, on the half hour. GitHub queues scheduled runs and may delay
+    # them under load, which is fine here — nothing depends on exact timing.
+    - cron: '30 * * * *'
+  workflow_dispatch:      # so it can be run by hand before a demo
+    inputs:
+      event_count:
+        description: 'Roughly how many events to send'
+        required: false
+        default: '70'
+      window_minutes:
+        description: 'Spread events across this many minutes'
+        required: false
+        default: '60'
+
+concurrency:
+  group: demo-traffic
+  cancel-in-progress: false
+
+jobs:
+  send:
+    name: Send a batch of events
+    runs-on: ubuntu-latest
+    # Without a key configured this would fail every hour and send failure
+    # mail forever; skip instead.
+    if: github.repository_owner != ''
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install httpx
+
+      - name: Send events
+        env:
+          EVENTPULSE_API_KEY: ${{ secrets.EVENTPULSE_DEMO_API_KEY }}
+          EVENTPULSE_ENDPOINT: ${{ vars.EVENTPULSE_ENDPOINT || 'https://eventpulse-analytics-backend.onrender.com' }}
+          EVENT_COUNT: ${{ github.event.inputs.event_count || '70' }}
+          WINDOW_MINUTES: ${{ github.event.inputs.window_minutes || '60' }}
+        run: |
+          if [ -z "$EVENTPULSE_API_KEY" ]; then
+            echo "EVENTPULSE_DEMO_API_KEY secret is not set — skipping."
+            echo "Add it under Settings → Secrets and variables → Actions."
+            exit 0
+          fi
+          python seeds/generate_live_events.py
