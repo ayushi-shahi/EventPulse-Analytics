@@ -23,9 +23,6 @@ const APIKeys = () => {
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showNewKeyModal, setShowNewKeyModal] = useState(false);
-  const [showEnterExistingKeyModal, setShowEnterExistingKeyModal] = useState(false);
-  const [enterExistingKeyTarget, setEnterExistingKeyTarget] = useState(null);
-  const [enteredExistingKey, setEnteredExistingKey] = useState('');
   const [newKeyData, setNewKeyData] = useState(null);
   const [formData, setFormData] = useState({
     client_name: '',
@@ -196,49 +193,23 @@ const APIKeys = () => {
 
   const startSelectKey = (key) => {
     if (!key?.id) return;
-    const storedSecret = getStoredSecretForKeyId(key.id);
-    if (storedSecret) {
-      selectAPIKey({
-        id: key.id,
-        api_key: storedSecret,
-        client_name: key.client_name,
-      });
-      success(`Selected API key: ${key.client_name}`);
-      return;
-    }
 
-    setEnterExistingKeyTarget({ id: key.id, client_name: key.client_name });
-    setEnteredExistingKey('');
-    setShowEnterExistingKeyModal(true);
-  };
-
-  const confirmEnterExistingKey = () => {
-    const target = enterExistingKeyTarget;
-    const secret = (enteredExistingKey || '').trim();
-    if (!target?.id) return;
-    if (!secret) {
-      showError('Please paste a valid API key value.');
-      return;
-    }
-
-    try {
-      const existing = JSON.parse(localStorage.getItem('api_key_secret_by_id') || '{}');
-      existing[target.id] = secret;
-      localStorage.setItem('api_key_secret_by_id', JSON.stringify(existing));
-    } catch {
-      // ignore localStorage errors
-    }
-
+    // Selecting no longer needs the secret.
+    //
+    // Keys are stored hashed and the plaintext is shown once at creation, so
+    // this used to prompt the user to paste it back — which nobody could do
+    // from a different browser, leaving them locked out of their own
+    // analytics. The API now scopes a request by key id and lets the session
+    // prove ownership, so the id alone is enough. The stored secret is still
+    // passed along when we happen to have it, since the SDK path accepts it.
     selectAPIKey({
-      id: target.id,
-      api_key: secret,
-      client_name: target.client_name,
+      id: key.id,
+      api_key: getStoredSecretForKeyId(key.id) || null,
+      client_name: key.client_name,
     });
-    setShowEnterExistingKeyModal(false);
-    setEnterExistingKeyTarget(null);
-    setEnteredExistingKey('');
-    success(`Selected API key: ${target.client_name}`);
+    success(`Now viewing: ${key.client_name}`);
   };
+
 
   if (loading) {
     return <Spinner fullScreen message="Loading API keys..." />;
@@ -521,53 +492,6 @@ const APIKeys = () => {
           </div>
         </Modal>
 
-        {/* Enter Existing API Key Secret Modal */}
-        <Modal
-          isOpen={showEnterExistingKeyModal}
-          onClose={() => {
-            setShowEnterExistingKeyModal(false);
-            setEnterExistingKeyTarget(null);
-            setEnteredExistingKey('');
-          }}
-          title="Enter API Key"
-          size="lg"
-          footer={
-            <>
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setShowEnterExistingKeyModal(false);
-                  setEnterExistingKeyTarget(null);
-                  setEnteredExistingKey('');
-                }}
-              >
-                Cancel
-              </Button>
-              <Button variant="primary" onClick={confirmEnterExistingKey}>
-                Save & Select
-              </Button>
-            </>
-          }
-        >
-          <div className="space-y-3">
-            <p className="text-xs sm:text-sm text-gray-400">
-              For security, the backend only shows an API key once at creation. Paste the key value for{' '}
-              <span className="font-medium text-gray-100">
-                {enterExistingKeyTarget?.client_name || 'this client'}
-              </span>
-              .
-            </p>
-            <Input
-              label="API Key"
-              name="existing_api_key"
-              value={enteredExistingKey}
-              onChange={(e) => setEnteredExistingKey(e.target.value)}
-              placeholder="Paste your API key here"
-              helperText="This will be saved locally in your browser for future selections."
-              required
-            />
-          </div>
-        </Modal>
       </div>
     </div>
   );
