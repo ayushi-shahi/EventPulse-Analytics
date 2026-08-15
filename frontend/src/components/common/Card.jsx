@@ -14,17 +14,17 @@ const Card = ({
   headerClassName = '',
   bodyClassName = '',
 }) => {
-  const baseStyles = 'bg-white rounded-lg shadow-sm border border-gray-200';
+  const baseStyles = 'bg-ink-900 rounded-lg shadow-sm border border-ink-700';
   const hoverStyles = hover ? 'hover:shadow-md transition-shadow duration-200' : '';
 
   return (
     <div className={`${baseStyles} ${hoverStyles} ${className}`}>
       {(title || subtitle || actions) && (
-        <div className={`px-6 py-4 border-b border-gray-200 ${headerClassName}`}>
+        <div className={`px-6 py-4 border-b border-ink-700 ${headerClassName}`}>
           <div className="flex items-center justify-between">
             <div>
               {title && (
-                <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+                <h3 className="text-lg font-semibold text-gray-100">{title}</h3>
               )}
               {subtitle && (
                 <p className="mt-1 text-sm text-gray-500">{subtitle}</p>

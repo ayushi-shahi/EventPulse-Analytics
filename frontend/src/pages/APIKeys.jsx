@@ -250,8 +250,8 @@ const APIKeys = () => {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">API Keys</h1>
-            <p className="text-sm sm:text-base text-gray-600 mt-1">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-100">API Keys</h1>
+            <p className="text-sm sm:text-base text-gray-400 mt-1">
               Manage your API keys for event ingestion and analytics
             </p>
           </div>
@@ -284,11 +284,11 @@ const APIKeys = () => {
                 <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 mb-3">
-                      <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                        <Key className="w-5 h-5 text-blue-600" />
+                      <div className="w-10 h-10 bg-brand-600/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <Key className="w-5 h-5 text-brand-400" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <h3 className="text-base sm:text-lg font-semibold text-gray-900 truncate">
+                        <h3 className="text-base sm:text-lg font-semibold text-gray-100 truncate">
                           {key.client_name}
                         </h3>
                         <p className="text-xs sm:text-sm text-gray-500">
@@ -303,15 +303,15 @@ const APIKeys = () => {
                           API Key ID
                         </p>
                         <div className="flex items-center gap-2">
-                          <code className="text-xs sm:text-sm font-mono text-gray-700  px-2 py-1 rounded truncate flex-1">
+                          <code className="text-xs sm:text-sm font-mono text-gray-300  px-2 py-1 rounded truncate flex-1">
                             {key.id}
                           </code>
                           <button
                             onClick={() => handleCopy(key.id, `id-${key.id}`)}
-                            className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
+                            className="text-gray-500 hover:text-gray-300 transition-colors flex-shrink-0"
                           >
                             {copiedId === `id-${key.id}` ? (
-                              <Check className="w-4 h-4 text-green-600" />
+                              <Check className="w-4 h-4 text-ok" />
                             ) : (
                               <Copy className="w-4 h-4" />
                             )}
@@ -323,7 +323,7 @@ const APIKeys = () => {
                         <p className="text-xs font-medium text-gray-500 uppercase mb-1">
                           Rate Limit
                         </p>
-                        <p className="text-xs sm:text-sm text-gray-700">
+                        <p className="text-xs sm:text-sm text-gray-300">
                           {key.rate_limit.toLocaleString()} requests/minute
                         </p>
                       </div>
@@ -368,7 +368,7 @@ const APIKeys = () => {
                       onClick={() => handleDelete(key.id, key.client_name)}
                       className="flex-1 sm:flex-none lg:w-full"
                     >
-                      <Trash2 className="w-4 h-4 text-red-600" />
+                      <Trash2 className="w-4 h-4 text-bad" />
                     </Button>
                   </div>
                 </div>
@@ -456,18 +456,18 @@ const APIKeys = () => {
           }
         >
           <div className="space-y-4">
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 sm:p-4">
+            <div className="bg-warn/10 border border-warn/30 rounded-lg p-3 sm:p-4">
               <div className="flex gap-2 sm:gap-3">
                 <div className="flex-shrink-0">
-                  <svg className="w-5 h-5 text-yellow-600" fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="w-5 h-5 text-warn" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                   </svg>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-xs sm:text-sm font-medium text-yellow-800">
+                  <h3 className="text-xs sm:text-sm font-medium text-warn">
                     Save this API key now!
                   </h3>
-                  <p className="text-xs sm:text-sm text-yellow-700 mt-1">
+                  <p className="text-xs sm:text-sm text-warn mt-1">
                     This is the only time you'll see the full API key. Copy it and store it securely.
                   </p>
                 </div>
@@ -477,11 +477,11 @@ const APIKeys = () => {
             {newKeyData && (
               <div className="space-y-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
                     API Key
                   </label>
                   <div className="flex items-center gap-2">
-                    <code className="flex-1 text-xs sm:text-sm font-mono  border border-gray-300 rounded-lg px-3 sm:px-4 py-2 sm:py-3 break-all">
+                    <code className="flex-1 text-xs sm:text-sm font-mono  border border-ink-600 rounded-lg px-3 sm:px-4 py-2 sm:py-3 break-all">
                       {newKeyData.api_key}
                     </code>
                     <Button
@@ -491,7 +491,7 @@ const APIKeys = () => {
                       className="flex-shrink-0"
                     >
                       {copiedId === 'new-key' ? (
-                        <Check className="w-4 h-4 text-green-600" />
+                        <Check className="w-4 h-4 text-ok" />
                       ) : (
                         <Copy className="w-4 h-4" />
                       )}
@@ -501,17 +501,17 @@ const APIKeys = () => {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-300 mb-1">
                       Client Name
                     </label>
-                    <p className="text-sm text-gray-900">{newKeyData.client_name}</p>
+                    <p className="text-sm text-gray-100">{newKeyData.client_name}</p>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-300 mb-1">
                       Rate Limit
                     </label>
-                    <p className="text-sm text-gray-900">
+                    <p className="text-sm text-gray-100">
                       {newKeyData.rate_limit.toLocaleString()} req/min
                     </p>
                   </div>
@@ -550,9 +550,9 @@ const APIKeys = () => {
           }
         >
           <div className="space-y-3">
-            <p className="text-xs sm:text-sm text-gray-600">
+            <p className="text-xs sm:text-sm text-gray-400">
               For security, the backend only shows an API key once at creation. Paste the key value for{' '}
-              <span className="font-medium text-gray-900">
+              <span className="font-medium text-gray-100">
                 {enterExistingKeyTarget?.client_name || 'this client'}
               </span>
               .

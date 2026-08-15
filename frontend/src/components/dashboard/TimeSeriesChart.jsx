@@ -36,11 +36,11 @@ const TimeSeriesChart = ({
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
-        <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3">
-          <p className="text-sm font-medium text-gray-900">
+        <div className="bg-ink-900 border border-ink-700 rounded-lg shadow-lg p-3">
+          <p className="text-sm font-medium text-gray-100">
             {formatDate(data[xAxisKey], 'MMM dd, HH:mm:ss')}
           </p>
-          <p className="text-sm text-gray-600 mt-1">
+          <p className="text-sm text-gray-400 mt-1">
             Value: <span className="font-semibold">{formatNumber(data[dataKey])}</span>
           </p>
         </div>

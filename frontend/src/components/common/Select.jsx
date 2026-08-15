@@ -20,20 +20,20 @@ const Select = forwardRef(({
 }, ref) => {
   const hasError = !!error;
 
-  const baseSelectStyles = 'block px-4 py-2.5 pr-10 text-sm bg-white border rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-0 disabled:bg-gray-100 disabled:cursor-not-allowed appearance-none';
+  const baseSelectStyles = 'block px-4 py-2.5 pr-10 text-sm bg-ink-900 border rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-0 disabled:bg-ink-800 disabled:cursor-not-allowed appearance-none';
   
   const borderStyles = hasError
-    ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
-    : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500';
+    ? 'border-bad/40 focus:border-bad focus:ring-bad'
+    : 'border-ink-600 focus:border-brand-500 focus:ring-brand-500';
 
   const widthClass = fullWidth ? 'w-full' : '';
 
   return (
     <div className={`${fullWidth ? 'w-full' : ''}`}>
       {label && (
-        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+        <label className="block text-sm font-medium text-gray-300 mb-1.5">
           {label}
-          {required && <span className="text-red-500 ml-1">*</span>}
+          {required && <span className="text-bad ml-1">*</span>}
         </label>
       )}
 
@@ -61,12 +61,12 @@ const Select = forwardRef(({
         </select>
 
         <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-          <ChevronDown className="h-5 w-5 text-gray-400" />
+          <ChevronDown className="h-5 w-5 text-gray-500" />
         </div>
       </div>
 
       {hasError && (
-        <p className="mt-1.5 text-sm text-red-600">{error}</p>
+        <p className="mt-1.5 text-sm text-bad">{error}</p>
       )}
 
       {!hasError && helperText && (

@@ -24,6 +24,19 @@ class APIClient {
   }
 
   /**
+   * Id of the selected API key. Unlike the secret this is always available,
+   * because the list endpoint returns it.
+   */
+  getSelectedClientId() {
+    try {
+      const raw = localStorage.getItem('selected_api_key_metadata');
+      return raw ? JSON.parse(raw)?.id ?? null : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Set auth token
    */
   setToken(token) {
@@ -45,16 +58,19 @@ class APIClient {
       'Content-Type': 'application/json',
     };
 
+    const token = this.getToken();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
     if (useAPIKey) {
+      // Prefer the plaintext secret when we happen to hold it (it was shown
+      // once at creation). Otherwise scope the request by key id and let the
+      // session prove ownership — keys are stored hashed, so a browser that
+      // never saw the secret can still read its own analytics.
       const apiKey = this.getSelectedAPIKey();
-      if (apiKey) {
-        headers['X-API-Key'] = apiKey;
-      }
-    } else {
-      const token = this.getToken();
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
+      if (apiKey) headers['X-API-Key'] = apiKey;
+
+      const clientId = this.getSelectedClientId();
+      if (clientId) headers['X-Client-Id'] = clientId;
     }
 
     return headers;

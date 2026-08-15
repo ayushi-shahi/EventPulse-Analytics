@@ -13,14 +13,14 @@ const Badge = ({
   const baseStyles = 'inline-flex items-center font-medium';
 
   const variants = {
-    default: 'bg-gray-100 text-gray-800',
-    primary: 'bg-blue-100 text-blue-800',
-    success: 'bg-green-100 text-green-800',
-    danger: 'bg-red-100 text-red-800',
-    warning: 'bg-yellow-100 text-yellow-800',
-    info: 'bg-cyan-100 text-cyan-800',
-    purple: 'bg-purple-100 text-purple-800',
-    pink: 'bg-pink-100 text-pink-800',
+    default: 'bg-ink-800 text-gray-200',
+    primary: 'bg-brand-600/20 text-brand-300',
+    success: 'bg-ok/20 text-ok',
+    danger: 'bg-bad/20 text-bad',
+    warning: 'bg-warn/20 text-warn',
+    info: 'bg-viz-2/20 text-viz-2',
+    purple: 'bg-viz-6/20 text-viz-6',
+    pink: 'bg-viz-5/20 text-viz-5',
   };
 
   const sizes = {

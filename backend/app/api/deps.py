@@ -6,15 +6,16 @@ API key lookup uses a direct hash-based query (single indexed lookup)
 instead of loading the entire api_keys table into memory on every request.
 """
 import asyncio
+import uuid
 from typing import Optional
 
-from fastapi import Depends, Header, HTTPException, Request, status
+from fastapi import Depends, Header, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.database import get_db
 from app.models.api_key import APIKey
-from app.core.security import hash_api_key        # hash first, then query
+from app.core.security import hash_api_key, decode_token   # hash first, then query
 from app.core.rate_limiter import rate_limiter
 from app.services.websocket_broadcaster import broadcaster
 
@@ -26,52 +27,95 @@ from app.services.websocket_broadcaster import broadcaster
 async def get_api_key(
     x_api_key: Optional[str] = Header(None),
     authorization: Optional[str] = Header(None),
+    x_client_id: Optional[str] = Header(None),
+    client_id: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
 ) -> APIKey:
     """
-    Validate the API key supplied in the request headers.
+    Resolve which API key (client) this request is scoped to.
 
-    Accepts two formats:
-      - X-API-Key: <key>
-      - Authorization: ApiKey <key>
+    Two independent routes, for two different callers:
 
-    The plain key is hashed with SHA-256 and looked up directly against
-    the indexed `key_hash` column — O(log n) instead of a full table scan.
+    1. **The SDK** presents the secret itself —
+       `X-API-Key: <key>` or `Authorization: ApiKey <key>`.
+       The plain key is SHA-256 hashed and matched against the indexed
+       `key_hash` column: a single indexed lookup, no table scan.
+
+    2. **The dashboard** presents the user's session —
+       `Authorization: Bearer <jwt>` plus the key's id via `X-Client-Id`
+       or `?client_id=`. Ownership is verified against the token's user.
+
+       Route 2 exists because keys are stored hashed: the plaintext is shown
+       exactly once, at creation. Without it, signing in from a new browser
+       left you unable to read your own analytics — the dashboard had no way
+       to name a key it could no longer produce the secret for. Proving you
+       own the key with your session is both sufficient and safer than
+       persisting secrets client-side.
     """
-    # --- Extract raw key from headers ---
+    # --- Route 1: the secret was supplied directly ---
     api_key_value: Optional[str] = None
-
     if x_api_key:
         api_key_value = x_api_key.strip()
     elif authorization and authorization.startswith("ApiKey "):
         api_key_value = authorization.removeprefix("ApiKey ").strip()
 
-    if not api_key_value:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="API key required. Supply it via X-API-Key header or "
-                   "Authorization: ApiKey <key>",
+    if api_key_value:
+        result = await db.execute(
+            select(APIKey).where(
+                APIKey.key_hash == hash_api_key(api_key_value),
+                APIKey.is_active == True,  # noqa: E712 — SQL boolean, not Python
+            )
         )
+        api_key = result.scalar_one_or_none()
+        if api_key is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or revoked API key",
+            )
+        return api_key
 
-    # --- Hash and query directly — single indexed lookup ---
-    key_hash = hash_api_key(api_key_value)
-    print(f"DEBUG hash: {key_hash}") 
+    # --- Route 2: an authenticated owner naming one of their own keys ---
+    requested_id = (x_client_id or client_id or "").strip()
+    if authorization and authorization.startswith("Bearer ") and requested_id:
+        token = authorization.removeprefix("Bearer ").strip()
+        payload = decode_token(token)
+        user_id = (payload or {}).get("sub")
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Session token is invalid or expired",
+            )
 
-    result = await db.execute(
-        select(APIKey).where(
-            APIKey.key_hash == key_hash,
-            APIKey.is_active == True,
+        try:
+            key_uuid = uuid.UUID(requested_id)
+        except (ValueError, AttributeError, TypeError):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="client_id must be a valid API key id",
+            )
+
+        result = await db.execute(
+            select(APIKey).where(
+                APIKey.id == key_uuid,
+                APIKey.is_active == True,  # noqa: E712
+            )
         )
+        api_key = result.scalar_one_or_none()
+
+        # Same response whether the key is missing or owned by someone else,
+        # so this cannot be used to probe for valid key ids.
+        if api_key is None or str(api_key.user_id) != str(user_id):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="API key not found",
+            )
+        return api_key
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Provide an API key via X-API-Key, or sign in and pass "
+               "X-Client-Id naming one of your keys",
     )
-    api_key = result.scalar_one_or_none()
-
-    if api_key is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or revoked API key",
-        )
-
-    return api_key
 
 
 # ---------------------------------------------------------------------------

@@ -19,11 +19,11 @@ const Spinner = ({
   };
 
   const colorClasses = {
-    blue: 'text-blue-600',
-    green: 'text-green-600',
-    purple: 'text-purple-600',
-    red: 'text-red-600',
-    gray: 'text-gray-600',
+    blue: 'text-brand-400',
+    green: 'text-ok',
+    purple: 'text-viz-6',
+    red: 'text-bad',
+    gray: 'text-gray-400',
   };
 
   const spinner = (
@@ -36,7 +36,7 @@ const Spinner = ({
         <div className={`absolute inset-0 ${colorClasses[color]} opacity-20 rounded-full animate-ping`}></div>
       </div>
       {message && (
-        <p className="text-sm font-medium text-gray-600 animate-pulse">
+        <p className="text-sm font-medium text-gray-400 animate-pulse">
           {message}
         </p>
       )}
@@ -45,7 +45,7 @@ const Spinner = ({
 
   if (fullScreen) {
     return (
-      <div className="fixed inset-0 bg-white bg-opacity-90 backdrop-blur-sm flex items-center justify-center z-50">
+      <div className="fixed inset-0 bg-ink-900 bg-opacity-90 backdrop-blur-sm flex items-center justify-center z-50">
         {spinner}
       </div>
     );

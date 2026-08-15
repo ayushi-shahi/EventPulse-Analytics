@@ -21,14 +21,14 @@ const Button = ({
   const baseStyles = 'inline-flex items-center justify-center font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
 
   const variants = {
-    primary: 'bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500 shadow-sm hover:shadow-md',
-    secondary: 'bg-gray-600 hover:bg-gray-700 text-white focus:ring-gray-500 shadow-sm',
-    success: 'bg-green-600 hover:bg-green-700 text-white focus:ring-green-500 shadow-sm',
-    danger: 'bg-red-600 hover:bg-red-700 text-white focus:ring-red-500 shadow-sm',
-    warning: 'bg-yellow-600 hover:bg-yellow-700 text-white focus:ring-yellow-500 shadow-sm',
-    outline: 'bg-transparent border-2 border-blue-600 text-blue-600 hover:bg-blue-50 focus:ring-blue-500',
-    ghost: 'bg-transparent hover:bg-gray-100 text-gray-700 focus:ring-gray-500',
-    link: 'bg-transparent text-blue-600 hover:text-blue-700 hover:underline focus:ring-blue-500',
+    primary: 'bg-brand-600 hover:bg-brand-500 text-white focus:ring-brand-500 shadow-sm hover:shadow-md',
+    secondary: 'bg-gray-600 hover:bg-ink-700 text-white focus:ring-ink-600 shadow-sm',
+    success: 'bg-ok hover:bg-ok/90 text-white focus:ring-ok shadow-sm',
+    danger: 'bg-bad hover:bg-bad/90 text-white focus:ring-bad shadow-sm',
+    warning: 'bg-warn hover:bg-warn/90 text-white focus:ring-warn shadow-sm',
+    outline: 'bg-transparent border-2 border-brand-500 text-brand-400 hover:bg-brand-600/15 focus:ring-brand-500',
+    ghost: 'bg-transparent hover:bg-ink-800 text-gray-300 focus:ring-ink-600',
+    link: 'bg-transparent text-brand-400 hover:text-brand-300 hover:underline focus:ring-brand-500',
   };
 
   const sizes = {

@@ -299,8 +299,8 @@ const Alerts = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Alerts</h1>
-          <p className="text-gray-600 mt-1">
+          <h1 className="text-2xl font-bold text-gray-100">Alerts</h1>
+          <p className="text-gray-400 mt-1">
             Configure and manage alerts for {selectedAPIKey?.client_name}
           </p>
         </div>
@@ -343,7 +343,7 @@ const Alerts = () => {
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-lg font-semibold text-gray-900">
+                      <h3 className="text-lg font-semibold text-gray-100">
                         {alert.name}
                       </h3>
                       <Badge
@@ -358,7 +358,7 @@ const Alerts = () => {
                     </div>
 
                     {alert.description && (
-                      <p className="text-sm text-gray-600 mb-3">
+                      <p className="text-sm text-gray-400 mb-3">
                         {alert.description}
                       </p>
                     )}
@@ -366,7 +366,7 @@ const Alerts = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
                       <div>
                         <p className="text-gray-500 font-medium">Condition</p>
-                        <p className="text-gray-900">
+                        <p className="text-gray-100">
                           {alert.expression.metric} {alert.expression.operator}{' '}
                           {alert.expression.threshold}
                         </p>
@@ -374,19 +374,19 @@ const Alerts = () => {
 
                       <div>
                         <p className="text-gray-500 font-medium">Cooldown</p>
-                        <p className="text-gray-900">
+                        <p className="text-gray-100">
                           {alert.cooldown_seconds}s
                         </p>
                       </div>
 
                       <div>
                         <p className="text-gray-500 font-medium">Triggers</p>
-                        <p className="text-gray-900">{alert.trigger_count}</p>
+                        <p className="text-gray-100">{alert.trigger_count}</p>
                       </div>
 
                       <div>
                         <p className="text-gray-500 font-medium">Last Triggered</p>
-                        <p className="text-gray-900">
+                        <p className="text-gray-100">
                           {alert.last_triggered
                             ? formatDate(alert.last_triggered, 'MMM dd, HH:mm')
                             : 'Never'}
@@ -429,7 +429,7 @@ const Alerts = () => {
                       size="sm"
                       onClick={() => handleDelete(alert.id, alert.name)}
                     >
-                      <Trash2 className="w-4 h-4 text-red-600" />
+                      <Trash2 className="w-4 h-4 text-bad" />
                     </Button>
                   </div>
                 </div>
@@ -544,8 +544,8 @@ const Alerts = () => {
             />
           </div>
 
-          <div className="border-t border-gray-200 pt-4">
-            <h4 className="text-sm font-medium text-gray-900 mb-3">
+          <div className="border-t border-ink-700 pt-4">
+            <h4 className="text-sm font-medium text-gray-100 mb-3">
               Notification Channels
             </h4>
 
@@ -556,9 +556,9 @@ const Alerts = () => {
                   name="websocket_enabled"
                   checked={formData.websocket_enabled}
                   onChange={handleChange}
-                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                  className="w-4 h-4 text-brand-400 rounded focus:ring-2 focus:ring-brand-500"
                 />
-                <span className="text-sm text-gray-700">
+                <span className="text-sm text-gray-300">
                   Send to WebSocket (Live Feed)
                 </span>
               </label>
@@ -610,15 +610,15 @@ const Alerts = () => {
                   <Badge variant={record.severity} size="sm">
                     {record.severity}
                   </Badge>
-                  <span className="text-xs text-gray-600">
+                  <span className="text-xs text-gray-400">
                     {formatDate(record.triggered_at)}
                   </span>
                 </div>
 
-                <p className="text-sm text-gray-900 mb-2">{record.message}</p>
+                <p className="text-sm text-gray-100 mb-2">{record.message}</p>
 
                 {record.context && (
-                  <div className="text-xs text-gray-600">
+                  <div className="text-xs text-gray-400">
                     <span className="font-medium">Current Value:</span>{' '}
                     {record.context.current_value?.toFixed(2) || 'N/A'} |{' '}
                     <span className="font-medium">Threshold:</span>{' '}

@@ -17,28 +17,28 @@ const Toast = ({ id, message, type = 'info', onClose, duration = 5000 }) => {
 
   const types = {
     success: {
-      bg: 'bg-green-50 border-green-500',
-      text: 'text-green-800',
+      bg: 'bg-ok/10 border-ok',
+      text: 'text-ok',
       icon: CheckCircle,
-      iconColor: 'text-green-500',
+      iconColor: 'text-ok',
     },
     error: {
-      bg: 'bg-red-50 border-red-500',
-      text: 'text-red-800',
+      bg: 'bg-bad/10 border-bad',
+      text: 'text-bad',
       icon: XCircle,
-      iconColor: 'text-red-500',
+      iconColor: 'text-bad',
     },
     warning: {
-      bg: 'bg-yellow-50 border-yellow-500',
-      text: 'text-yellow-800',
+      bg: 'bg-warn/10 border-warn',
+      text: 'text-warn',
       icon: AlertTriangle,
-      iconColor: 'text-yellow-500',
+      iconColor: 'text-warn',
     },
     info: {
-      bg: 'bg-blue-50 border-blue-500',
-      text: 'text-blue-800',
+      bg: 'bg-brand-600/15 border-brand-500',
+      text: 'text-brand-300',
       icon: Info,
-      iconColor: 'text-blue-500',
+      iconColor: 'text-brand-400',
     },
   };
 

@@ -184,10 +184,10 @@ const Events = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Events</h1>
-          <p className="text-gray-600 mt-1">
+          <h1 className="text-2xl font-bold text-gray-100">Events</h1>
+          <p className="text-gray-400 mt-1">
             Browse and filter events from{' '}
-            <span className="font-semibold text-blue-600">
+            <span className="font-semibold text-brand-400">
               {selectedAPIKey?.client_name}
             </span>
           </p>
@@ -268,7 +268,7 @@ const Events = () => {
           <>
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className=" border-b border-gray-200">
+                <thead className=" border-b border-ink-700">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Event
@@ -287,7 +287,7 @@ const Events = () => {
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-ink-900 divide-y divide-ink-700">
                   {events.map((event) => (
                     <React.Fragment key={event.id}>
                       <tr className="hover: transition-colors">
@@ -296,9 +296,9 @@ const Events = () => {
                             {event.event_name}
                           </Badge>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-100">
                           {event.user_id || (
-                            <span className="text-gray-400">N/A</span>
+                            <span className="text-gray-500">N/A</span>
                           )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -310,7 +310,7 @@ const Events = () => {
                         <td className="px-6 py-4 whitespace-nowrap text-sm">
                           <button
                             onClick={() => toggleRow(event.id)}
-                            className="text-blue-600 hover:text-blue-800 font-medium"
+                            className="text-brand-400 hover:text-brand-300 font-medium"
                           >
                             {expandedRows[event.id] ? 'Hide' : 'View'} Details
                           </button>
@@ -326,13 +326,13 @@ const Events = () => {
                                   <p className="text-xs font-medium text-gray-500 uppercase">
                                     Event ID
                                   </p>
-                                  <p className="text-sm text-gray-900 mt-1">{event.id}</p>
+                                  <p className="text-sm text-gray-100 mt-1">{event.id}</p>
                                 </div>
                                 <div>
                                   <p className="text-xs font-medium text-gray-500 uppercase">
                                     Client ID
                                   </p>
-                                  <p className="text-sm text-gray-900 mt-1 font-mono">
+                                  <p className="text-sm text-gray-100 mt-1 font-mono">
                                     {event.client_id}
                                   </p>
                                 </div>
@@ -344,7 +344,7 @@ const Events = () => {
                                     <p className="text-xs font-medium text-gray-500 uppercase mb-2">
                                       Properties
                                     </p>
-                                    <pre className="text-xs bg-white border border-gray-200 rounded p-3 overflow-x-auto">
+                                    <pre className="text-xs bg-ink-900 border border-ink-700 rounded p-3 overflow-x-auto">
                                       {formatJSON(event.properties)}
                                     </pre>
                                   </div>
@@ -360,9 +360,9 @@ const Events = () => {
             </div>
 
             {/* Pagination */}
-            <div className="px-6 py-4 border-t border-gray-200 ">
+            <div className="px-6 py-4 border-t border-ink-700 ">
               <div className="flex items-center justify-between">
-                <div className="text-sm text-gray-700">
+                <div className="text-sm text-gray-300">
                   Showing{' '}
                   <span className="font-medium">
                     {(pagination.page - 1) * pagination.page_size + 1}
@@ -406,8 +406,8 @@ const Events = () => {
                           onClick={() => goToPage(pageNum)}
                           className={`px-3 py-1 text-sm rounded ${
                             pagination.page === pageNum
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-white border border-gray-300 text-gray-700 hover:'
+                              ? 'bg-brand-600 text-white'
+                              : 'bg-ink-900 border border-ink-600 text-gray-300 hover:'
                           }`}
                         >
                           {pageNum}

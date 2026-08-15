@@ -58,17 +58,17 @@ const Modal = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
       onClick={handleOverlayClick}
     >
-      <div className={`relative w-full ${sizes[size]} bg-white rounded-xl shadow-2xl transform transition-all`}>
+      <div className={`relative w-full ${sizes[size]} bg-ink-900 rounded-xl shadow-2xl transform transition-all`}>
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">{title}</h2>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-ink-700">
+          <h2 className="text-xl font-semibold text-gray-100">{title}</h2>
           {showCloseButton && (
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+              className="text-gray-500 hover:text-gray-300 transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
@@ -82,7 +82,7 @@ const Modal = ({
 
         {/* Footer */}
         {footer && (
-          <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+          <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-ink-700 bg-ink-850 rounded-b-xl">
             {footer}
           </div>
         )}

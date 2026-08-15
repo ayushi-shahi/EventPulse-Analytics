@@ -29,13 +29,13 @@ const TopEventsChart = ({
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
-        <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3">
-          <p className="text-sm font-semibold text-gray-900">{data.event_name}</p>
-          <p className="text-sm text-gray-600 mt-1">
+        <div className="bg-ink-900 border border-ink-700 rounded-lg shadow-lg p-3">
+          <p className="text-sm font-semibold text-gray-100">{data.event_name}</p>
+          <p className="text-sm text-gray-400 mt-1">
             Count: <span className="font-semibold">{formatNumber(data.count)}</span>
           </p>
           {data.percentage !== undefined && (
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-gray-400">
               Percentage: <span className="font-semibold">{formatPercentage(data.percentage)}</span>
             </p>
           )}

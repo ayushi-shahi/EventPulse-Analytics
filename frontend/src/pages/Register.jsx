@@ -91,24 +91,24 @@ const Register = () => {
       <div className="w-full max-w-md">
         {/* Logo and Title */}
         <div className="text-center mb-8 sm:mb-10 animate-fade-in">
-          <div className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 bg-blue-500 rounded-2xl shadow-xl mb-5 sm:mb-6 transform hover:scale-105 transition-transform">
+          <div className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 bg-brand-600 rounded-2xl shadow-xl mb-5 sm:mb-6 transform hover:scale-105 transition-transform">
             <Activity className="w-9 h-9 sm:w-11 sm:h-11 text-white" />
           </div>
-          <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-2 sm:mb-3">Join EventPulse</h1>
-          <p className="text-base sm:text-lg text-gray-600">Create your analytics account</p>
+          <h1 className="text-3xl sm:text-4xl font-bold text-gray-100 mb-2 sm:mb-3">Join EventPulse</h1>
+          <p className="text-base sm:text-lg text-gray-400">Create your analytics account</p>
         </div>
 
         {/* Register Card */}
-        <div className="bg-white rounded-2xl shadow-xl border-2 border-gray-100 p-6 sm:p-8 transform hover:shadow-2xl transition-all">
+        <div className="bg-ink-900 rounded-2xl shadow-xl border-2 border-ink-800 p-6 sm:p-8 transform hover:shadow-2xl transition-all">
           <div className="mb-6">
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-1 sm:mb-2">Get started</h2>
-            <p className="text-sm sm:text-base text-gray-600">Fill in your details to create an account</p>
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-100 mb-1 sm:mb-2">Get started</h2>
+            <p className="text-sm sm:text-base text-gray-400">Fill in your details to create an account</p>
           </div>
 
           {/* Global Error */}
           {errors.general && (
-            <div className="mb-5 sm:mb-6 p-3 sm:p-4 bg-red-50 border-2 border-red-200 rounded-xl animate-shake">
-              <p className="text-xs sm:text-sm font-medium text-red-600">{errors.general}</p>
+            <div className="mb-5 sm:mb-6 p-3 sm:p-4 bg-bad/10 border-2 border-bad/30 rounded-xl animate-shake">
+              <p className="text-xs sm:text-sm font-medium text-bad">{errors.general}</p>
             </div>
           )}
 
@@ -142,20 +142,20 @@ const Register = () => {
 
               {/* Password Strength Indicator */}
               {passwordStrength && (
-                <div className="mt-2.5 sm:mt-3 p-2.5 sm:p-3 rounded-lg border-2 border-gray-200 ">
+                <div className="mt-2.5 sm:mt-3 p-2.5 sm:p-3 rounded-lg border-2 border-ink-700 ">
                   {passwordStrength.isValid ? (
-                    <div className="flex items-center gap-2 text-green-600">
+                    <div className="flex items-center gap-2 text-ok">
                       <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
                       <span className="text-xs sm:text-sm font-semibold">Strong password! ✓</span>
                     </div>
                   ) : (
                     <div className="space-y-1.5 sm:space-y-2">
-                      <div className="flex items-center gap-2 text-red-600 mb-1.5 sm:mb-2">
+                      <div className="flex items-center gap-2 text-bad mb-1.5 sm:mb-2">
                         <XCircle className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
                         <span className="text-xs sm:text-sm font-semibold">Password requirements:</span>
                       </div>
                       {passwordStrength.errors.map((error, index) => (
-                        <p key={index} className="text-xs text-red-600 ml-6 sm:ml-7">
+                        <p key={index} className="text-xs text-bad ml-6 sm:ml-7">
                           • {error}
                         </p>
                       ))}
@@ -193,10 +193,10 @@ const Register = () => {
           {/* Divider */}
           <div className="relative my-6 sm:my-8">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t-2 border-gray-200"></div>
+              <div className="w-full border-t-2 border-ink-700"></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-3 sm:px-4 bg-white text-gray-500 font-medium">Already have an account?</span>
+              <span className="px-3 sm:px-4 bg-ink-900 text-gray-500 font-medium">Already have an account?</span>
             </div>
           </div>
 
