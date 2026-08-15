@@ -39,7 +39,6 @@ import random
 import sys
 from datetime import datetime, timedelta, timezone
 
-import asyncpg
 import httpx
 
 API = os.environ.get("EP_API", "https://eventpulse-analytics-backend.onrender.com/api/v1")
@@ -304,6 +303,12 @@ async def main() -> None:
         sys.exit("DATABASE_URL is required")
 
     print(f"\nSeeding EventPulse demo data -> {API}\n")
+
+    # Imported here, not at module scope: generate_live_events.py reuses this
+    # module purely for the event taxonomy and talks to the API over HTTP, so
+    # requiring a database driver would make the scheduled job install (and
+    # fail on) a dependency it never uses.
+    import asyncpg
 
     dsn = DB_URL.replace("postgresql+asyncpg://", "postgresql://").split("?")[0]
     conn = await asyncpg.connect(dsn, ssl="require")
