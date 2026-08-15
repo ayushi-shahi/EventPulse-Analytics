@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional, Tuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, desc
+from sqlalchemy import select, func, and_, desc, text
 from sqlalchemy.dialects.postgresql import insert
 
 from app.models.event import Event
@@ -377,3 +377,148 @@ class MetricsService:
         )
 
         return result.scalars().all(), total
+
+    # =====================================================
+    # PROPERTY BREAKDOWN + FUNNEL
+    # =====================================================
+
+    # Only these JSONB keys may be grouped on. The property name is
+    # interpolated into SQL (JSONB key access cannot be parameterised the same
+    # way as a value), so it must never come straight from user input.
+    ALLOWED_BREAKDOWN_PROPERTIES = {
+        "device", "browser", "os", "country", "city", "plan", "path",
+        "referrer", "utm_source", "utm_campaign", "feature", "surface",
+        "error_type", "severity", "endpoint", "method", "status_code",
+        "billing_period", "payment_method", "reason", "role", "format",
+    }
+
+    @staticmethod
+    def _window(period: str) -> timedelta:
+        return {
+            "last_hour": timedelta(hours=1),
+            "last_24h": timedelta(hours=24),
+            "last_7d": timedelta(days=7),
+            "last_30d": timedelta(days=30),
+        }.get(period, timedelta(hours=24))
+
+    async def get_breakdown(
+        self,
+        client_id: str,
+        prop: str,
+        period: str = "last_24h",
+        event_name: str | None = None,
+        limit: int = 12,
+    ) -> Dict[str, Any]:
+        """
+        Group events by one JSONB property — the basis of every
+        "top countries / devices / plans" view.
+        """
+        if prop not in self.ALLOWED_BREAKDOWN_PROPERTIES:
+            raise ValueError(f"property '{prop}' is not available for breakdown")
+
+        end_time = datetime.now(timezone.utc)
+        start_time = end_time - self._window(period)
+
+        # `properties ->> 'key' IS NOT NULL` rather than the `?` containment
+        # operator: a bare `?` inside a text() statement is ambiguous with
+        # parameter placeholders and is not worth the risk for an equivalent test.
+        filters = ["client_id = :client_id", "event_time >= :start", "event_time < :end",
+                   f"properties ->> '{prop}' IS NOT NULL"]
+        params: Dict[str, Any] = {
+            "client_id": client_id, "start": start_time, "end": end_time, "limit": limit,
+        }
+        if event_name:
+            filters.append("event_name = :event_name")
+            params["event_name"] = event_name
+
+        sql = text(f"""
+            SELECT properties ->> '{prop}' AS label,
+                   count(*)                AS count,
+                   count(DISTINCT user_id) AS users
+            FROM events
+            WHERE {' AND '.join(filters)}
+            GROUP BY 1
+            ORDER BY count DESC
+            LIMIT :limit
+        """)
+        rows = (await self.db.execute(sql, params)).mappings().all()
+        total = sum(r["count"] for r in rows) or 1
+
+        return {
+            "property": prop,
+            "period": period,
+            "event_name": event_name,
+            "total": sum(r["count"] for r in rows),
+            "items": [
+                {
+                    "label": r["label"],
+                    "count": r["count"],
+                    "users": r["users"],
+                    "percentage": round(r["count"] / total * 100, 2),
+                }
+                for r in rows
+            ],
+        }
+
+    async def get_funnel(
+        self,
+        client_id: str,
+        steps: List[str],
+        period: str = "last_7d",
+    ) -> Dict[str, Any]:
+        """
+        Conversion funnel over distinct users.
+
+        A user counts at step N only if they also reached every earlier step,
+        so the series is monotonically non-increasing — otherwise a later step
+        with more users than the one before it produces a nonsense funnel.
+        """
+        end_time = datetime.now(timezone.utc)
+        start_time = end_time - self._window(period)
+
+        results: List[Dict[str, Any]] = []
+        previous_users: Optional[set] = None
+        first_count = 0
+
+        for index, step in enumerate(steps):
+            rows = await self.db.execute(
+                text("""
+                    SELECT DISTINCT user_id
+                    FROM events
+                    WHERE client_id = :client_id
+                      AND event_name = :event_name
+                      AND event_time >= :start AND event_time < :end
+                      AND user_id IS NOT NULL
+                """),
+                {"client_id": client_id, "event_name": step,
+                 "start": start_time, "end": end_time},
+            )
+            users = {r[0] for r in rows.fetchall()}
+            if previous_users is not None:
+                users &= previous_users
+            previous_users = users
+
+            count = len(users)
+            if index == 0:
+                first_count = count
+
+            results.append({
+                "step": step,
+                "users": count,
+                "conversion_from_start": round(count / first_count * 100, 2) if first_count else 0.0,
+                "conversion_from_previous": (
+                    100.0 if index == 0
+                    else round(count / results[index - 1]["users"] * 100, 2)
+                    if results[index - 1]["users"] else 0.0
+                ),
+                "dropped": 0 if index == 0 else results[index - 1]["users"] - count,
+            })
+
+        return {
+            "period": period,
+            "steps": results,
+            "overall_conversion": (
+                round(results[-1]["users"] / first_count * 100, 2)
+                if results and first_count else 0.0
+            ),
+        }

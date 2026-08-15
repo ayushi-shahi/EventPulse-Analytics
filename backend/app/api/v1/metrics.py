@@ -353,3 +353,64 @@ async def get_events(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve events: {str(e)}"
         )
+
+@router.get("/breakdown")
+async def get_breakdown(
+    property: str = Query(..., description="Event property to group by, e.g. device, country, plan"),
+    period: str = Query(default="last_24h", description="last_hour | last_24h | last_7d | last_30d"),
+    event_name: Optional[str] = Query(default=None, description="Optional: restrict to one event type"),
+    limit: int = Query(default=12, ge=1, le=50),
+    api_key: APIKey = Depends(get_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Group events by a single property and return counts, unique users and share.
+
+    Powers the "top devices / countries / plans" style views. The property must
+    be one of a fixed allow-list — see `/metrics/breakdown/properties`.
+    """
+    service = MetricsService(db)
+    try:
+        return await service.get_breakdown(
+            client_id=str(api_key.id),
+            prop=property,
+            period=period,
+            event_name=event_name,
+            limit=limit,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.get("/breakdown/properties")
+async def list_breakdown_properties(
+    api_key: APIKey = Depends(get_api_key),
+):
+    """Properties that may be used with /metrics/breakdown."""
+    return {"properties": sorted(MetricsService.ALLOWED_BREAKDOWN_PROPERTIES)}
+
+
+@router.get("/funnel")
+async def get_funnel(
+    steps: str = Query(
+        ...,
+        description="Comma-separated event names in order, e.g. "
+                    "signup_started,signup_completed,checkout_started,purchase_completed",
+    ),
+    period: str = Query(default="last_7d"),
+    api_key: APIKey = Depends(get_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Conversion funnel across ordered event types, counted in unique users.
+
+    A user is counted at a step only if they also reached every preceding step.
+    """
+    parsed = [s.strip() for s in steps.split(",") if s.strip()]
+    if not 2 <= len(parsed) <= 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="provide between 2 and 8 steps",
+        )
+    service = MetricsService(db)
+    return await service.get_funnel(client_id=str(api_key.id), steps=parsed, period=period)
