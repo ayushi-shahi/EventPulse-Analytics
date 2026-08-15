@@ -5,119 +5,91 @@ import {
   Activity,
   Bell,
   Key,
-  BarChart2,
   Radio,
+  Filter,
+  Split,
   X,
 } from 'lucide-react';
 
+const NAV = [
+  { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+  { name: 'Live Feed', path: '/live-feed', icon: Radio },
+  { name: 'Explorer', path: '/explorer', icon: Filter },
+  { name: 'Funnels', path: '/funnels', icon: Split },
+  { name: 'Events', path: '/events', icon: Activity },
+  { name: 'Alerts', path: '/alerts', icon: Bell },
+  { name: 'API Keys', path: '/api-keys', icon: Key },
+];
+
 /**
- * Sidebar Navigation Component
+ * Sidebar.
+ *
+ * Stays `fixed` at every breakpoint. It previously switched to `lg:static` on
+ * desktop, which dropped it into normal flow inside Layout's block stack and
+ * pushed the main content down by the sidebar's own height — every page then
+ * cancelled that with a `-mt-72` negative margin. Keeping it out of flow at
+ * all sizes removes the cause instead of the symptom.
  */
-const Sidebar = ({ isOpen, onClose }) => {
-  const navItems = [
-    {
-      name: 'Dashboard',
-      path: '/dashboard',
-      icon: LayoutDashboard,
-    },
-    {
-      name: 'Live Feed',
-      path: '/live-feed',
-      icon: Radio,
-    },
-    {
-      name: 'Events',
-      path: '/events',
-      icon: Activity,
-    },
-    {
-      name: 'Metrics',
-      path: '/metrics',
-      icon: BarChart2,
-    },
-    {
-      name: 'Alerts',
-      path: '/alerts',
-      icon: Bell,
-    },
-    {
-      name: 'API Keys',
-      path: '/api-keys',
-      icon: Key,
-    },
-  ];
+const Sidebar = ({ isOpen, onClose }) => (
+  <>
+    {isOpen && (
+      <div
+        className="fixed inset-0 bg-black/60 z-40 lg:hidden"
+        onClick={onClose}
+        aria-hidden
+      />
+    )}
 
-  return (
-    <>
-      {/* Overlay for mobile */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+    <aside
+      className={`fixed left-0 z-50 w-64 bg-ink-900 border-r border-ink-700
+                  top-0 h-full lg:top-14 lg:h-[calc(100vh-3.5rem)]
+                  flex flex-col transform transition-transform duration-200 ease-out
+                  lg:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
+    >
+      {/* Mobile-only header; on desktop the Navbar already shows the brand. */}
+      <div className="lg:hidden flex items-center justify-between h-14 px-4 border-b border-ink-700">
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 bg-brand-600 rounded-lg grid place-items-center">
+            <span className="text-white font-bold text-xs">EP</span>
+          </div>
+          <span className="font-semibold text-gray-100">EventPulse</span>
+        </div>
+        <button
           onClick={onClose}
-        />
-      )}
+          className="p-2 rounded-lg text-gray-400 hover:bg-ink-800 hover:text-gray-200"
+          aria-label="Close menu"
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </div>
 
-      {/* Sidebar */}
-      <aside
-        className={`
-          fixed top-0 left-0 h-full bg-white border-r border-gray-200 z-50
-          w-64 transform transition-transform duration-300 ease-in-out
-          lg:translate-x-0 lg:static
-          ${isOpen ? 'translate-x-0' : '-translate-x-full'}
-        `}
-      >
-        {/* Mobile Header */}
-        <div className="lg:hidden flex items-center justify-between p-4 border-b border-gray-200">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">EP</span>
-            </div>
-            <h2 className="text-lg font-bold text-gray-900">EventPulse</h2>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-          >
-            <X className="w-5 h-5 text-gray-600" />
-          </button>
+      <nav className="flex-1 overflow-y-auto p-3">
+        <div className="space-y-0.5">
+          {NAV.map(({ name, path, icon: Icon }) => (
+            <NavLink
+              key={path}
+              to={path}
+              onClick={onClose}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 h-9 rounded-lg text-sm transition-colors ${
+                  isActive
+                    ? 'bg-brand-600/15 text-brand-300 font-medium'
+                    : 'text-gray-400 hover:bg-ink-800 hover:text-gray-200'
+                }`
+              }
+            >
+              <Icon className="w-[18px] h-[18px] shrink-0" />
+              <span>{name}</span>
+            </NavLink>
+          ))}
         </div>
+      </nav>
 
-        {/* Navigation */}
-        <nav className="p-4 mt-16 lg:mt-0">
-          <div className="space-y-1">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <NavLink
-                  key={item.path}
-                  to={item.path}
-                  onClick={() => onClose()}
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
-                      isActive
-                        ? 'bg-blue-50 text-blue-700 font-medium'
-                        : 'text-gray-700 hover:bg-gray-50'
-                    }`
-                  }
-                >
-                  <Icon className="w-5 h-5" />
-                  <span>{item.name}</span>
-                </NavLink>
-              );
-            })}
-          </div>
-        </nav>
-
-        {/* Footer */}
-        <div className="absolute -bottom-10 left-0 right-0 p-4 border-t border-gray-200">
-          <div className="text-xs text-gray-500 text-center">
-            <p>EventPulse Analytics</p>
-            <p className="mt-1">© 2026 All rights reserved</p>
-          </div>
-        </div>
-      </aside>
-    </>
-  );
-};
+      <div className="p-3 border-t border-ink-700">
+        <p className="text-[11px] text-gray-600 text-center">EventPulse Analytics</p>
+      </div>
+    </aside>
+  </>
+);
 
 export default Sidebar;

@@ -149,13 +149,13 @@ const LiveFeed = () => {
       error:     'bg-red-50 border-l-4 border-l-red-500',
       purchase:  'bg-purple-50 border-l-4 border-l-purple-500',
     };
-    return colors[eventName] || 'bg-gray-50 border-l-4 border-l-gray-400';
+    return colors[eventName] || ' border-l-4 border-l-gray-400';
   };
 
   // ─── No key selected ──────────────────────────────────────────────────────
   if (!hasSelectedKey) {
     return (
-      <div className="min-h-screen -mt-[700px] flex items-center justify-center bg-gray-50 px-4 py-8">
+      <div className="min-h-screen -mt-[700px] flex items-center justify-center  px-4 py-8">
         <EmptyState
           icon={Radio}
           title="No API Key Selected"
@@ -168,7 +168,7 @@ const LiveFeed = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         <div className="space-y-4 sm:space-y-6">
 
@@ -281,7 +281,7 @@ const LiveFeed = () => {
           )}
 
           {/* ── Header ───────────────────────────────────────────────────── */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 sm:p-6 -mt-72">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 sm:p-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="flex items-center gap-3 sm:gap-4">
                 <div className="w-12 h-12 sm:w-14 sm:h-14 bg-blue-500 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
@@ -403,7 +403,7 @@ const LiveFeed = () => {
 
           {/* ── Event Stream ─────────────────────────────────────────────── */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="border-b border-gray-200 px-5 sm:px-6 py-3 sm:py-4 bg-gray-50">
+            <div className="border-b border-gray-200 px-5 sm:px-6 py-3 sm:py-4 ">
               <div className="flex items-center justify-between">
                 <h2 className="text-base sm:text-lg font-bold text-gray-900">
                   Event Stream ({displayedEvents.length.toLocaleString()} displayed)
@@ -414,7 +414,7 @@ const LiveFeed = () => {
 
             <div
               ref={eventsContainerRef}
-              className="h-[500px] sm:h-[600px] overflow-y-auto p-4 sm:p-6 space-y-3 sm:space-y-4 bg-gray-50"
+              className="h-[500px] sm:h-[600px] overflow-y-auto p-4 sm:p-6 space-y-3 sm:space-y-4 "
             >
               {displayedEvents.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full">

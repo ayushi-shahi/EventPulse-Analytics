@@ -16,6 +16,8 @@ import APIKeys from './pages/APIKeys';
 import LiveFeed from './pages/LiveFeed';
 import Events from './pages/Events';
 import Alerts from './pages/Alerts';
+import Explorer from './pages/Explorer';
+import Funnels from './pages/Funnels';
 
 function App() {
   return (
@@ -42,7 +44,9 @@ function App() {
                     <Route path="live-feed" element={<LiveFeed />} />
                     <Route path="events" element={<Events />} />
                     <Route path="alerts" element={<Alerts />} />
-                    <Route path="metrics" element={<Dashboard />} />
+                    <Route path="explorer" element={<Explorer />} />
+                    <Route path="funnels" element={<Funnels />} />
+                    <Route path="metrics" element={<Navigate to="/explorer" replace />} />
                     <Route path="settings" element={<Dashboard />} />
                   </Route>
                   <Route path="*" element={<Navigate to="/login" replace />} />

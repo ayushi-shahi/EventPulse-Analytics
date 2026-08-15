@@ -87,7 +87,7 @@ const Register = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-8 sm:py-12">
+    <div className=" flex items-center justify-center px-4 py-8 sm:py-12">
       <div className="w-full max-w-md">
         {/* Logo and Title */}
         <div className="text-center mb-8 sm:mb-10 animate-fade-in">
@@ -142,7 +142,7 @@ const Register = () => {
 
               {/* Password Strength Indicator */}
               {passwordStrength && (
-                <div className="mt-2.5 sm:mt-3 p-2.5 sm:p-3 rounded-lg border-2 border-gray-200 bg-gray-50">
+                <div className="mt-2.5 sm:mt-3 p-2.5 sm:p-3 rounded-lg border-2 border-gray-200 ">
                   {passwordStrength.isValid ? (
                     <div className="flex items-center gap-2 text-green-600">
                       <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />

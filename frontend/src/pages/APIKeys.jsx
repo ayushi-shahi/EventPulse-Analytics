@@ -245,7 +245,7 @@ const APIKeys = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 -mt-72">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
       <div className="space-y-5 sm:space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -303,7 +303,7 @@ const APIKeys = () => {
                           API Key ID
                         </p>
                         <div className="flex items-center gap-2">
-                          <code className="text-xs sm:text-sm font-mono text-gray-700 bg-gray-50 px-2 py-1 rounded truncate flex-1">
+                          <code className="text-xs sm:text-sm font-mono text-gray-700  px-2 py-1 rounded truncate flex-1">
                             {key.id}
                           </code>
                           <button
@@ -481,7 +481,7 @@ const APIKeys = () => {
                     API Key
                   </label>
                   <div className="flex items-center gap-2">
-                    <code className="flex-1 text-xs sm:text-sm font-mono bg-gray-50 border border-gray-300 rounded-lg px-3 sm:px-4 py-2 sm:py-3 break-all">
+                    <code className="flex-1 text-xs sm:text-sm font-mono  border border-gray-300 rounded-lg px-3 sm:px-4 py-2 sm:py-3 break-all">
                       {newKeyData.api_key}
                     </code>
                     <Button

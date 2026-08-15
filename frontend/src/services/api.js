@@ -298,6 +298,27 @@ class APIClient {
     });
   }
 
+  /**
+   * Group events by one property (device, country, plan, path, ...).
+   * `eventName` optionally narrows the breakdown to a single event type.
+   */
+  async getBreakdown(property, period = 'last_24h', eventName = null, limit = 12) {
+    const params = new URLSearchParams({ property, period, limit: String(limit) });
+    if (eventName) params.append('event_name', eventName);
+    return this.request(`/metrics/breakdown?${params}`, { useAPIKey: true });
+  }
+
+  /** Properties the backend allows in a breakdown. */
+  async getBreakdownProperties() {
+    return this.request('/metrics/breakdown/properties', { useAPIKey: true });
+  }
+
+  /** Conversion funnel over an ordered list of event names. */
+  async getFunnel(steps, period = 'last_7d') {
+    const params = new URLSearchParams({ steps: steps.join(','), period });
+    return this.request(`/metrics/funnel?${params}`, { useAPIKey: true });
+  }
+
   async getEvents(params = {}) {
     const queryParams = new URLSearchParams();
     

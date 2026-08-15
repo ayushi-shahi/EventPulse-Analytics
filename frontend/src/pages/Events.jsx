@@ -180,7 +180,7 @@ const Events = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 -mt-72">
+    <div className="max-w-7xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -268,7 +268,7 @@ const Events = () => {
           <>
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
+                <thead className=" border-b border-gray-200">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Event
@@ -290,7 +290,7 @@ const Events = () => {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {events.map((event) => (
                     <React.Fragment key={event.id}>
-                      <tr className="hover:bg-gray-50 transition-colors">
+                      <tr className="hover: transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <Badge variant="primary" size="sm">
                             {event.event_name}
@@ -319,7 +319,7 @@ const Events = () => {
 
                       {expandedRows[event.id] && (
                         <tr>
-                          <td colSpan="5" className="px-6 py-4 bg-gray-50">
+                          <td colSpan="5" className="px-6 py-4 ">
                             <div className="space-y-2">
                               <div className="grid grid-cols-2 gap-4">
                                 <div>
@@ -360,7 +360,7 @@ const Events = () => {
             </div>
 
             {/* Pagination */}
-            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
+            <div className="px-6 py-4 border-t border-gray-200 ">
               <div className="flex items-center justify-between">
                 <div className="text-sm text-gray-700">
                   Showing{' '}
@@ -407,7 +407,7 @@ const Events = () => {
                           className={`px-3 py-1 text-sm rounded ${
                             pagination.page === pageNum
                               ? 'bg-blue-600 text-white'
-                              : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+                              : 'bg-white border border-gray-300 text-gray-700 hover:'
                           }`}
                         >
                           {pageNum}

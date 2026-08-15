@@ -1,165 +1,221 @@
-import React, { useState, useEffect } from 'react';
-import { Menu, X, User, LogOut, Key, Bell, Settings } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Menu, LogOut, Key, Bell, Settings, ChevronDown, Check, Wifi, WifiOff } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useAPIKey } from '../../hooks/useAPIKey';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useBell } from '../../context/BellContext';
-import { useNavigate } from 'react-router-dom';
-import { formatAPIKey, getInitials } from '../../utils/formatters';
-import Badge from '../common/Badge';
+import { getInitials } from '../../utils/formatters';
+
+function useOutsideClose(ref, onClose, active) {
+  useEffect(() => {
+    if (!active) return;
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) onClose();
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [ref, onClose, active]);
+}
 
 const Navbar = ({ onMenuClick }) => {
   const { user, logout } = useAuth();
-  const { selectedAPIKey } = useAPIKey();
-  const { lastMessage } = useWebSocket();
+  const { apiKeys = [], selectedAPIKey, selectAPIKey } = useAPIKey();
+  const { lastMessage, isConnected } = useWebSocket();
   const { items, addBell, clearBell } = useBell();
   const navigate = useNavigate();
-  const [showUserMenu, setShowUserMenu] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
 
-  // Listen for alert events from WebSocket
+  const [menu, setMenu] = useState(null); // 'user' | 'bell' | 'keys' | null
+  const [unread, setUnread] = useState(0);
+
+  const userRef = useRef(null);
+  const bellRef = useRef(null);
+  const keyRef = useRef(null);
+  useOutsideClose(userRef, () => setMenu(null), menu === 'user');
+  useOutsideClose(bellRef, () => setMenu(null), menu === 'bell');
+  useOutsideClose(keyRef, () => setMenu(null), menu === 'keys');
+
   useEffect(() => {
-    if (!lastMessage) return;
-    if (lastMessage.type === 'alert_triggered') {
+    if (lastMessage?.type === 'alert_triggered') {
       addBell(
         lastMessage.data?.alert_name
           ? `Alert: ${lastMessage.data.alert_name} triggered`
           : 'An alert was triggered',
         'warning'
       );
-      setUnreadCount((c) => c + 1);
+      setUnread((c) => c + 1);
     }
-  }, [lastMessage]);
+  }, [lastMessage, addBell]);
 
-  const handleBellOpen = () => {
-    setShowNotifications(!showNotifications);
-    if (!showNotifications) setUnreadCount(0);
+  const toggle = (name) => {
+    setMenu((m) => (m === name ? null : name));
+    if (name === 'bell') setUnread(0);
   };
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
-
-  const typeColor = { info: '#3b82f6', warning: '#f59e0b', error: '#ef4444', success: '#10b981' };
+  const dotColor = { info: 'bg-brand-400', warning: 'bg-warn', error: 'bg-bad', success: 'bg-ok' };
 
   return (
-    <nav className="bg-white border-b border-gray-200 fixed top-0 left-0 right-0 z-40 h-16">
-      <div className="flex items-center justify-between h-full px-4 lg:px-6">
-        {/* Left */}
-        <div className="flex items-center gap-4">
-          <button onClick={onMenuClick} className="lg:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors">
-            <Menu className="w-6 h-6 text-gray-600" />
-          </button>
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">EP</span>
-            </div>
-            <div className="hidden sm:block">
-              <h1 className="text-xl font-bold text-gray-900">EventPulse</h1>
-              <p className="text-xs text-gray-500">Analytics Platform</p>
-            </div>
+    <nav className="fixed top-0 inset-x-0 z-40 h-14 bg-ink-900/95 backdrop-blur border-b border-ink-700">
+      <div className="flex items-center gap-3 h-full px-4 lg:px-6">
+        <button
+          onClick={onMenuClick}
+          className="lg:hidden p-2 -ml-2 rounded-lg text-gray-400 hover:bg-ink-800 hover:text-gray-200"
+          aria-label="Open menu"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+
+        <div className="flex items-center gap-2.5 lg:w-56">
+          <div className="w-7 h-7 bg-brand-600 rounded-lg grid place-items-center shrink-0">
+            <span className="text-white font-bold text-xs">EP</span>
           </div>
+          <span className="font-semibold text-gray-100 hidden sm:block">EventPulse</span>
         </div>
 
-        {/* Center */}
-        <div className="hidden md:flex items-center gap-2">
-          {selectedAPIKey ? (
-            <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg">
-              <Key className="w-4 h-4 text-blue-600" />
-              <div className="text-sm">
-                <p className="font-medium text-blue-900">{selectedAPIKey.client_name}</p>
-                <p className="text-xs text-blue-600 font-mono">
-                  {formatAPIKey(selectedAPIKey.api_key || selectedAPIKey.key)}
-                </p>
-              </div>
+        {/* Source switcher — which API key the whole dashboard is scoped to. */}
+        <div ref={keyRef} className="relative">
+          <button
+            onClick={() => toggle('keys')}
+            className="btn-ghost h-8 max-w-[240px]"
+            aria-expanded={menu === 'keys'}
+          >
+            <Key className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+            <span className="truncate">
+              {selectedAPIKey?.client_name || 'Select a source'}
+            </span>
+            <ChevronDown className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+          </button>
+
+          {menu === 'keys' && (
+            <div className="absolute left-0 mt-2 w-64 panel shadow-pop py-1 animate-slide-up">
+              <p className="px-3 py-2 text-[11px] uppercase tracking-wide text-gray-500">
+                Data source
+              </p>
+              {apiKeys.length === 0 ? (
+                <button
+                  onClick={() => { navigate('/api-keys'); setMenu(null); }}
+                  className="w-full text-left px-3 py-2 text-sm text-brand-300 hover:bg-ink-800"
+                >
+                  Create your first API key →
+                </button>
+              ) : (
+                apiKeys.map((k) => (
+                  <button
+                    key={k.id}
+                    onClick={() => { selectAPIKey?.(k); setMenu(null); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-ink-800"
+                  >
+                    <span className="flex-1 text-left truncate">{k.client_name}</span>
+                    {selectedAPIKey?.id === k.id && (
+                      <Check className="w-3.5 h-3.5 text-brand-400 shrink-0" />
+                    )}
+                  </button>
+                ))
+              )}
             </div>
-          ) : (
-            <Badge variant="warning">No API Key Selected</Badge>
           )}
         </div>
 
-        {/* Right */}
-        <div className="flex items-center gap-3">
-          {/* Bell */}
-          <div className="relative">
-            <button onClick={handleBellOpen} className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors">
-              <Bell className="w-5 h-5 text-gray-600" />
-              {unreadCount > 0 && (
-                <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 rounded-full text-white text-xs flex items-center justify-center">
-                  {unreadCount}
-                </span>
-              )}
-            </button>
+        <div className="flex-1" />
 
-            {showNotifications && (
-              <>
-                <div className="fixed inset-0 z-99" onClick={() => setShowNotifications(false)} />
-                <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-[100]">
-                  <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-                    <p className="text-sm font-semibold text-gray-900">Notifications</p>
-                    {items.length > 0 && (
-                      <button onClick={clearBell} className="text-xs text-gray-400 hover:text-gray-600">
-                        Clear all
-                      </button>
-                    )}
-                  </div>
-                  <div className="max-h-80 overflow-y-auto">
-                    {items.length === 0 ? (
-                      <p className="text-sm text-gray-500 text-center py-6">No notifications yet</p>
-                    ) : (
-                      items.map((item) => (
-                        <div key={item.id} className="px-4 py-3 border-b border-gray-100 hover:bg-gray-50">
-                          <div className="flex items-start gap-2">
-                            <span style={{ color: typeColor[item.type], fontSize: 18 }}>●</span>
-                            <div>
-                              <p className="text-sm text-gray-800">{item.message}</p>
-                              <p className="text-xs text-gray-400 mt-0.5">
-                                {item.timestamp.toLocaleTimeString()}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </>
+        {/* Live connection state — this is a real-time product; say so. */}
+        <span
+          className={`chip hidden sm:inline-flex ${
+            isConnected
+              ? 'border-ok/30 bg-ok/10 text-ok'
+              : 'border-ink-600 bg-ink-800 text-gray-500'
+          }`}
+          title={isConnected ? 'Streaming live events' : 'Not connected'}
+        >
+          {isConnected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+          {isConnected ? 'Live' : 'Offline'}
+        </span>
+
+        <div ref={bellRef} className="relative">
+          <button
+            onClick={() => toggle('bell')}
+            className="relative p-2 rounded-lg text-gray-400 hover:bg-ink-800 hover:text-gray-200"
+            aria-label="Notifications"
+          >
+            <Bell className="w-[18px] h-[18px]" />
+            {unread > 0 && (
+              <span className="absolute top-1 right-1 min-w-[15px] h-[15px] px-1 bg-bad rounded-full text-white text-[10px] font-semibold grid place-items-center">
+                {unread > 9 ? '9+' : unread}
+              </span>
             )}
-          </div>
+          </button>
 
-          {/* User Menu */}
-          <div className="relative">
-            <button onClick={() => setShowUserMenu(!showUserMenu)} className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-100 transition-colors">
-              <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
-                <span className="text-white text-sm font-semibold">{getInitials(user?.email)}</span>
+          {menu === 'bell' && (
+            <div className="absolute right-0 mt-2 w-80 panel shadow-pop animate-slide-up">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-ink-700">
+                <p className="text-sm font-semibold text-gray-200">Notifications</p>
+                {items.length > 0 && (
+                  <button onClick={clearBell} className="text-xs text-gray-500 hover:text-gray-300">
+                    Clear all
+                  </button>
+                )}
               </div>
-              <span className="hidden sm:block text-sm font-medium text-gray-700">{user?.email}</span>
-            </button>
+              <div className="max-h-80 overflow-y-auto">
+                {items.length === 0 ? (
+                  <p className="text-sm text-gray-500 text-center py-8">Nothing yet</p>
+                ) : (
+                  items.map((item) => (
+                    <div key={item.id} className="flex items-start gap-2.5 px-4 py-3 border-b border-ink-800 last:border-0">
+                      <span className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${dotColor[item.type] || 'bg-gray-500'}`} />
+                      <div className="min-w-0">
+                        <p className="text-sm text-gray-300">{item.message}</p>
+                        <p className="text-[11px] text-gray-600 mt-0.5">
+                          {item.timestamp.toLocaleTimeString()}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
 
-            {showUserMenu && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />
-                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
-                  <div className="px-4 py-3 border-b border-gray-200">
-                    <p className="text-sm font-medium text-gray-900">{user?.email}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">Role: {user?.role || 'User'}</p>
-                  </div>
-                  <button onClick={() => { navigate('/settings'); setShowUserMenu(false); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
-                    <Settings className="w-4 h-4" />Settings
-                  </button>
-                  <button onClick={() => { navigate('/api-keys'); setShowUserMenu(false); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
-                    <Key className="w-4 h-4" />API Keys
-                  </button>
-                  <hr className="my-1 border-gray-200" />
-                  <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors">
-                    <LogOut className="w-4 h-4" />Logout
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+        <div ref={userRef} className="relative">
+          <button
+            onClick={() => toggle('user')}
+            className="flex items-center gap-2 p-1 rounded-lg hover:bg-ink-800"
+            aria-label="Account menu"
+          >
+            <div className="w-7 h-7 bg-brand-600 rounded-full grid place-items-center">
+              <span className="text-white text-[11px] font-semibold">
+                {getInitials(user?.email)}
+              </span>
+            </div>
+          </button>
+
+          {menu === 'user' && (
+            <div className="absolute right-0 mt-2 w-60 panel shadow-pop py-1 animate-slide-up">
+              <div className="px-4 py-3 border-b border-ink-700">
+                <p className="text-sm text-gray-200 truncate">{user?.email}</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">{user?.role || 'user'}</p>
+              </div>
+              <button
+                onClick={() => { navigate('/api-keys'); setMenu(null); }}
+                className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-gray-300 hover:bg-ink-800"
+              >
+                <Key className="w-4 h-4" /> API Keys
+              </button>
+              <button
+                onClick={() => { navigate('/settings'); setMenu(null); }}
+                className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-gray-300 hover:bg-ink-800"
+              >
+                <Settings className="w-4 h-4" /> Settings
+              </button>
+              <div className="my-1 border-t border-ink-700" />
+              <button
+                onClick={() => { logout(); navigate('/login'); }}
+                className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-bad hover:bg-bad/10"
+              >
+                <LogOut className="w-4 h-4" /> Sign out
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </nav>

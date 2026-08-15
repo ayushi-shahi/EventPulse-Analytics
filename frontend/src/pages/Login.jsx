@@ -65,7 +65,7 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-8 sm:py-12">
+    <div className=" flex items-center justify-center px-4 py-8 sm:py-12">
       <div className="w-full max-w-md">
         {/* Logo and Title */}
         <div className="text-center mb-8 sm:mb-10 animate-fade-in">
