@@ -161,8 +161,16 @@ export const APIKeyProvider = ({ children }) => {
       try {
         const { default: apiClient } = await import('../services/api');
         const res = await apiClient.getAPIKeys();
-        const keys = Array.isArray(res) ? res : res?.items ?? res?.api_keys ?? [];
+        const raw = Array.isArray(res) ? res : res?.items ?? res?.api_keys ?? [];
         if (cancelled) return;
+
+        // Oldest first. The list arrives in arbitrary order, and defaulting to
+        // whatever happened to be first could land the user on a throwaway
+        // "Staging" key with almost no data. The first key someone created is
+        // nearly always their primary one.
+        const keys = [...raw].sort(
+          (a, b) => new Date(a.created_at ?? 0) - new Date(b.created_at ?? 0)
+        );
 
         setApiKeys(keys);
 

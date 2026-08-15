@@ -66,11 +66,8 @@ const LiveFeed = () => {
       setPausedCount(0);
     }
 
-    if (hasSelectedKey && selectedAPIKey) {
-      connect(selectedAPIKey.id, selectedAPIKey.api_key || selectedAPIKey.key);
-    } else {
-      disconnect();
-    }
+    // The provider owns the connection lifecycle now, so the socket is
+    // already open before this page mounts. Only local pause state resets here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedAPIKey?.id, hasSelectedKey]);
   // connect/disconnect are stable useCallback refs — excluding them from deps
@@ -138,7 +135,10 @@ const LiveFeed = () => {
     resetRateLimit();
     setIsPaused(false);
     if (selectedAPIKey) {
-      connect(selectedAPIKey.id, selectedAPIKey.api_key || selectedAPIKey.key);
+      connect(
+        selectedAPIKey.id,
+        selectedAPIKey.api_key || selectedAPIKey.key || localStorage.getItem('token')
+      );
     }
   };
 

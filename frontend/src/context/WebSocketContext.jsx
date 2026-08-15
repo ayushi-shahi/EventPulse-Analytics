@@ -1,5 +1,6 @@
 import React, { createContext, useState, useEffect, useCallback, useRef } from 'react';
 import { API_CONFIG } from '../config';
+import { useAPIKey } from '../hooks/useAPIKey';
 
 export const WebSocketContext = createContext(null);
 
@@ -10,6 +11,7 @@ const PING_INTERVAL = 30000;
 const ALERT_AUTO_DISMISS_MS = 10000;
 
 export const WebSocketProvider = ({ children }) => {
+  const { selectedAPIKey } = useAPIKey();
   const [isConnected, setIsConnected]             = useState(false);
   const [events, setEvents]                       = useState([]);
   const [totalEventsCount, setTotalEventsCount]   = useState(0);
@@ -264,6 +266,28 @@ export const WebSocketProvider = ({ children }) => {
     const interval = setInterval(sendPing, PING_INTERVAL);
     return () => clearInterval(interval);
   }, [isConnected, sendPing]);
+
+  // ─── Auto-connect while a data source is selected ────────────────────────
+  // The socket used to be opened only by the Live Feed page, so the header's
+  // connection badge read "Offline" everywhere else even though the app was
+  // perfectly healthy. Owning the connection here keeps that indicator honest
+  // and means alerts arrive on whichever page the user is looking at.
+  //
+  // The token may be the key secret or the user's session JWT: keys are stored
+  // hashed, so a browser that never created the key has only the session.
+  const selectedKeyId = selectedAPIKey?.id ?? null;
+  useEffect(() => {
+    if (!selectedKeyId) {
+      disconnect();
+      return;
+    }
+    const token =
+      selectedAPIKey?.api_key || selectedAPIKey?.key || localStorage.getItem('token');
+    if (token) connect(selectedKeyId, token);
+    // connect/disconnect are stable useCallback refs; re-running on every
+    // render would tear the socket down continuously.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedKeyId]);
 
   const value = {
     isConnected,
