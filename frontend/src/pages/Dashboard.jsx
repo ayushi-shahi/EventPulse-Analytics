@@ -19,6 +19,15 @@ const PERIODS = [
 
 const REFRESH_MS = 30_000;
 
+// The chart must cover the period the user picked, at a granularity that
+// yields a readable number of points. Asking for per-minute data while "Last
+// 24 hours" is selected returned only the last hour and rendered a flat line.
+const SERIES_FOR = {
+  last_hour: { metric: 'events_per_minute', hours: 1, unit: 'minute' },
+  last_24h: { metric: 'events_per_hour', hours: 24, unit: 'hour' },
+  last_7d: { metric: 'events_per_hour', hours: 24 * 7, unit: 'hour' },
+};
+
 function timeLabel(iso, period) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
@@ -44,13 +53,18 @@ export default function Dashboard() {
   const load = useCallback(async () => {
     if (!hasSelectedKey) return;
     setKeyInvalid(false);
+
+    const cfg = SERIES_FOR[period] ?? SERIES_FOR.last_24h;
+    const windowEnd = new Date().toISOString();
+    const windowStart = new Date(Date.now() - cfg.hours * 3600_000).toISOString();
+
     try {
       // One period drives the whole page, so fetch together and surface a
       // failure once rather than five times. Breakdowns are optional extras:
       // if the backend predates them, the core dashboard still renders.
       const [ov, ts, device, country, plan] = await Promise.all([
         apiClient.getOverviewMetrics(period),
-        apiClient.getTimeSeries(period === 'last_7d' ? 'events_per_hour' : 'events_per_minute'),
+        apiClient.getTimeSeries(cfg.metric, windowStart, windowEnd),
         apiClient.getBreakdown('device', period, null, 6).catch(() => null),
         apiClient.getBreakdown('country', period, null, 6).catch(() => null),
         apiClient.getBreakdown('plan', period, null, 6).catch(() => null),
@@ -186,7 +200,7 @@ export default function Dashboard() {
         <Panel
           className="xl:col-span-2"
           title="Volume over time"
-          subtitle={period === 'last_7d' ? 'events per hour' : 'events per minute'}
+          subtitle={`events per ${(SERIES_FOR[period] ?? SERIES_FOR.last_24h).unit}`}
           bodyClassName="p-4 pt-5"
         >
           {loading ? (
