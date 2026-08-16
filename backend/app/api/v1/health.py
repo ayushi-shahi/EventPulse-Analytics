@@ -82,18 +82,31 @@ async def detailed_health_check(db: AsyncSession = Depends(get_db)):
         health["status"] = "degraded"
         health["checks"]["database"] = {"status": "unhealthy", "error": str(e)}
 
-    # Redis check
+    # Redis check.
+    #
+    # This deliberately performs a WRITE. A managed plan that has exhausted its
+    # monthly command quota still answers PING, so a read-only probe reports
+    # "healthy" while every enqueue is being refused — which is exactly how the
+    # 2026-08-16 outage stayed hidden. Ingestion is a write path, so the health
+    # check has to exercise one.
+    redis_client = None
     try:
         redis_client = redis.from_url(settings.REDIS_URL, socket_connect_timeout=2)
         await redis_client.ping()
         queue_length = await redis_client.llen("event_queue")
-        await redis_client.close()
+        await redis_client.set("health:write_probe", "1", ex=60)
         health["checks"]["redis"] = {"status": "healthy", "queue_length": queue_length}
         health["metrics"]["queue_length"] = queue_length
     except Exception as e:
         logger.error(f"Redis check failed: {e}")
         health["status"] = "degraded"
         health["checks"]["redis"] = {"status": "unhealthy", "error": str(e)}
+    finally:
+        if redis_client is not None:
+            try:
+                await redis_client.aclose()
+            except Exception:
+                pass
 
     # Active clients check
     try:
