@@ -1,4 +1,5 @@
 # backend/app/services/ingest_service.py
+import json
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -56,7 +57,6 @@ class IngestionService:
         
         # Push to Redis list (acts as a queue)
         # We'll use Redis Lists for simplicity (FIFO queue)
-        import json
         await self.redis.rpush(
             "event_queue",
             json.dumps(event_payload, default=str)
@@ -84,10 +84,12 @@ class IngestionService:
             Dict with batch status
         """
         event_ids = []
-        
-        # Use pipeline for efficient batch operations
-        pipe = self.redis.pipeline()
-        
+
+        # Build the whole batch, then push it with a single variadic RPUSH.
+        # A pipeline would still be billed one command per queued RPUSH on
+        # managed Redis, so a 50-event batch cost 50 commands instead of 1.
+        payloads = []
+
         for event_data in events:
             # Set event_time to now if not provided
             if event_data.event_time is None:
@@ -105,18 +107,13 @@ class IngestionService:
                 "received_at": datetime.now(timezone.utc).isoformat()
             }
             
-            # Add to pipeline
-            import json
-            pipe.rpush(
-                "event_queue",
-                json.dumps(event_payload, default=str)
-            )
-            
+            payloads.append(json.dumps(event_payload, default=str))
             event_ids.append(event_id)
-        
-        # Execute all at once
-        await pipe.execute()
-        
+
+        # One command for the whole batch
+        if payloads:
+            await self.redis.rpush("event_queue", *payloads)
+
         return {
             "success": True,
             "queued": len(events),

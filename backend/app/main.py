@@ -56,14 +56,23 @@ if settings.SENTRY_DSN:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("EventPulse starting up...")
- 
-    await rate_limiter.initialize()
-    logger.info("Rate limiter initialised")
- 
-    await broadcaster.initialize()
+
+    # Redis is a degradable dependency, not a hard one. Metrics, dashboards and
+    # the whole read path are served from Postgres, so a Redis outage (or an
+    # exhausted command quota on a managed plan) must not stop the app from
+    # booting — otherwise one dead cache takes down every endpoint.
+    if await rate_limiter.initialize():
+        logger.info("Rate limiter initialised")
+    else:
+        logger.warning("Rate limiter degraded — requests will not be rate limited")
+
+    try:
+        await broadcaster.initialize()
+        logger.info("WebSocket broadcaster started")
+    except Exception as e:
+        logger.warning(f"WebSocket broadcaster degraded — live updates are off: {e}")
     broadcast_task = asyncio.create_task(broadcaster.subscribe_and_broadcast())
-    logger.info("WebSocket broadcaster started")
- 
+
     # Start APScheduler (replaces Celery worker + beat)
     from app.tasks.scheduler import start_scheduler
     start_scheduler()

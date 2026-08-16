@@ -1,5 +1,6 @@
 # backend/app/api/v1/health.py
 from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 import redis.asyncio as redis
@@ -131,18 +132,42 @@ async def liveness_probe():
 @router.get("/ready", include_in_schema=False)
 async def readiness_probe(db: AsyncSession = Depends(get_db)):
     """
-    Readiness probe for Kubernetes.
-    Returns 200 if ready, 503 if not ready.
+    Readiness probe. Returns 200 if ready, 503 if not ready.
+
+    Readiness tracks Postgres only. Redis is a degradable dependency — the
+    read path (metrics, dashboards, funnels) is served entirely from Postgres,
+    so a Redis outage must not make the whole service look unready and get
+    pulled out of rotation. Redis state is still reported, as "degraded".
     """
+    now = datetime.now(timezone.utc).isoformat()
+
     try:
         await db.execute(text("SELECT 1"))
+    except Exception as e:
+        logger.error(f"Readiness check failed — database unreachable: {e}")
+        return JSONResponse(
+            status_code=503,
+            content={"status": "not_ready", "database": "down",
+                     "error": str(e), "timestamp": now},
+        )
+
+    redis_state = "ok"
+    redis_client = None
+    try:
         redis_client = redis.from_url(settings.REDIS_URL, socket_connect_timeout=1)
         await redis_client.ping()
-        await redis_client.close()
-        return {"status": "ready", "timestamp": datetime.now(timezone.utc).isoformat()}
     except Exception as e:
-        logger.error(f"Readiness check failed: {e}")
-        return {"status": "not_ready", "error": str(e), "timestamp": datetime.now(timezone.utc).isoformat()}
+        redis_state = "degraded"
+        logger.warning(f"Readiness: Redis degraded (serving from Postgres): {e}")
+    finally:
+        if redis_client is not None:
+            try:
+                await redis_client.aclose()
+            except Exception:
+                pass
+
+    return {"status": "ready", "database": "ok",
+            "redis": redis_state, "timestamp": now}
 
 
 # -------------------------------

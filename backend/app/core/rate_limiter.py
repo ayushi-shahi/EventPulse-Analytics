@@ -1,6 +1,7 @@
 # backend/app/core/rate_limiter.py (complete rewrite with Lua)
 import redis.asyncio as redis
 from datetime import datetime, timezone
+from time import monotonic
 from typing import Optional, Tuple, Dict
 from app.config import settings
 from app.logging_config import get_logger
@@ -45,34 +46,68 @@ class RateLimiter:
     end
     """
     
+    # When Redis is unreachable, wait this long before trying again. Without a
+    # cooldown every single request would attempt a fresh connection and pay
+    # the full connect timeout.
+    INIT_RETRY_COOLDOWN_SECONDS = 30
+
     def __init__(self):
         self.redis_client: Optional[redis.Redis] = None
         self._script_sha: Optional[str] = None
-    
-    async def initialize(self):
-        """Initialize Redis connection and load Lua script"""
-        if self.redis_client is None:
-            try:
-                self.redis_client = redis.from_url(
-                    settings.REDIS_URL,
-                    encoding="utf-8",
-                    decode_responses=True,
-                    socket_connect_timeout=5,
-                    socket_keepalive=True,
-                    max_connections=50  # Connection pool
-                )
-                
-                # Load Lua script into Redis
-                self._script_sha = await self.redis_client.script_load(
-                    self.RATE_LIMIT_SCRIPT
-                )
-                
-                logger.info("✅ Rate limiter initialized with Lua script")
-            
-            except Exception as e:
-                logger.error(f"Failed to initialize rate limiter: {e}", exc_info=True)
-                raise
-    
+        self._last_init_failure: float = 0.0
+
+    async def initialize(self) -> bool:
+        """
+        Connect to Redis and load the Lua script.
+
+        Never raises. Rate limiting is a protective layer, not a hard
+        dependency — if Redis is unreachable (or the plan's command quota is
+        exhausted) the limiter degrades to fail-open rather than taking the
+        whole API down with it. Returns True when the limiter is usable.
+        """
+        if self.redis_client is not None:
+            return True
+
+        if monotonic() - self._last_init_failure < self.INIT_RETRY_COOLDOWN_SECONDS:
+            return False
+
+        client = None
+        try:
+            client = redis.from_url(
+                settings.REDIS_URL,
+                encoding="utf-8",
+                decode_responses=True,
+                socket_connect_timeout=5,
+                socket_timeout=5,
+                socket_keepalive=True,
+                max_connections=50  # Connection pool
+            )
+
+            # Load Lua script into Redis
+            self._script_sha = await client.script_load(
+                self.RATE_LIMIT_SCRIPT
+            )
+
+            self.redis_client = client
+            self._last_init_failure = 0.0
+            logger.info("✅ Rate limiter initialized with Lua script")
+            return True
+
+        except Exception as e:
+            self._last_init_failure = monotonic()
+            self._script_sha = None
+            self.redis_client = None
+            if client is not None:
+                try:
+                    await client.aclose()
+                except Exception:
+                    pass
+            logger.warning(
+                f"Rate limiter unavailable, failing open for the next "
+                f"{self.INIT_RETRY_COOLDOWN_SECONDS}s: {e}"
+            )
+            return False
+
     async def close(self):
         """Close Redis connection"""
         if self.redis_client:
@@ -102,15 +137,22 @@ class RateLimiter:
             Tuple of (is_allowed, info_dict)
             info_dict contains: current, limit, remaining, reset_at
         """
-        if self.redis_client is None:
-            await self.initialize()
-        
         now = datetime.now(timezone.utc)
         timestamp = int(now.timestamp())
-        
+
+        if not await self.initialize():
+            # Redis is down — allow the request rather than reject everyone.
+            return True, {
+                "current": 0,
+                "limit": limit,
+                "remaining": limit,
+                "reset_at": timestamp + window_seconds,
+                "degraded": True,
+            }
+
         # Redis key for this rate limit
         redis_key = f"rate_limit:{key}"
-        
+
         try:
             # Execute Lua script
             result = await self.redis_client.evalsha(
@@ -137,24 +179,45 @@ class RateLimiter:
             }
         
         except redis.exceptions.NoScriptError:
-            # Script not loaded, reload it
+            # Redis restarted and dropped its script cache — reload once.
+            # Reloading is itself a Redis call, so it gets the same fail-open
+            # treatment rather than being allowed to escape as a 500.
             logger.warning("Lua script not found, reloading...")
-            self._script_sha = await self.redis_client.script_load(
-                self.RATE_LIMIT_SCRIPT
-            )
-            # Retry
-            return await self.is_allowed(key, limit, window_seconds)
-        
+            try:
+                self._script_sha = await self.redis_client.script_load(
+                    self.RATE_LIMIT_SCRIPT
+                )
+                result = await self.redis_client.evalsha(
+                    self._script_sha, 1, redis_key, timestamp, window_seconds, limit
+                )
+                return bool(result[0]), {
+                    "current": int(result[1]),
+                    "limit": limit,
+                    "remaining": max(0, limit - int(result[1])),
+                    "reset_at": timestamp + window_seconds,
+                }
+            except Exception as e:
+                return self._fail_open(limit, timestamp, window_seconds, e)
+
         except Exception as e:
-            logger.error(f"Rate limit check failed: {e}", exc_info=True)
-            # Fail open (allow request) to prevent service disruption
-            return True, {
-                "current": 0,
-                "limit": limit,
-                "remaining": limit,
-                "reset_at": timestamp + window_seconds,
-                "error": str(e)
-            }
+            return self._fail_open(limit, timestamp, window_seconds, e)
+
+    def _fail_open(self, limit, timestamp, window_seconds, exc):
+        """Allow the request when Redis misbehaves, and back off reconnecting."""
+        logger.error(f"Rate limit check failed, allowing request: {exc}")
+        # Drop the client so the next call reconnects — and so the cooldown in
+        # initialize() stops us hammering a Redis that is down or over quota.
+        self.redis_client = None
+        self._script_sha = None
+        self._last_init_failure = monotonic()
+        return True, {
+            "current": 0,
+            "limit": limit,
+            "remaining": limit,
+            "reset_at": timestamp + window_seconds,
+            "degraded": True,
+            "error": str(exc),
+        }
     
     async def reset(self, key: str):
         """

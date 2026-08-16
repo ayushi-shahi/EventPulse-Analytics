@@ -160,11 +160,37 @@ class WebSocketBroadcaster:
 
     async def subscribe_and_broadcast(self):
         """Main broadcaster loop."""
-        await self.initialize()
-        await self.pubsub.psubscribe("events:*", "metrics:*", "alerts:*", "rate_limit:*")
-
-        logger.info("✅ WebSocket broadcaster listening to Redis")
         self.running = True
+
+        # Keep retrying the initial subscribe. If Redis is unreachable when the
+        # app boots, live updates should switch themselves on once it comes
+        # back — not stay dead until someone redeploys.
+        while self.running:
+            try:
+                await self.initialize()
+                await self.pubsub.psubscribe(
+                    "events:*", "metrics:*", "alerts:*", "rate_limit:*"
+                )
+                break
+            except asyncio.CancelledError:
+                logger.info("Broadcaster task cancelled before subscribing")
+                return
+            except Exception as e:
+                logger.warning(
+                    f"Broadcaster cannot subscribe, retrying in "
+                    f"{self.reconnect_delay}s: {e}"
+                )
+                delay = self.reconnect_delay
+                self.reconnect_delay = min(delay * 2, self.max_reconnect_delay)
+                await self.close()
+                self.running = True  # close() clears it; we are still retrying
+                await asyncio.sleep(delay)
+
+        if not self.running:
+            return
+
+        self.reconnect_delay = 1
+        logger.info("✅ WebSocket broadcaster listening to Redis")
         consecutive_errors = 0
 
         while self.running:

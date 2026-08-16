@@ -130,6 +130,69 @@ and no server-side logout.
 > `rate_limit:`, so sharing one instance would have them overwriting each
 > other's counters.
 
+### C1. "max requests limit exceeded" — the monthly command quota is gone
+
+Upstash free tier allows **500,000 commands per month**. Past that, *every*
+command is refused:
+
+```
+ResponseError: max requests limit exceeded. Limit: 500000, Usage: 500000.
+```
+
+**Confirm it:**
+
+```bash
+python -c "
+import asyncio, redis.asyncio as r
+c = r.from_url('<REDIS_URL>')
+print(asyncio.run(c.ping()))"
+```
+
+**Get running again** — create a fresh Upstash database and point `REDIS_URL`
+at it. The quota is per database, so a new one starts at zero; you do not have
+to wait for the reset date. Then check the reset date in the Upstash console so
+you know when the old one frees up.
+
+**Then find what is burning commands.** A pipeline is billed **one command per
+queued call**, not one for the pipeline. That is the trap — pipelining looks
+like an optimisation and is invisible in the code. Both the queue producer and
+consumer now use *variadic* commands, which really are one command:
+
+| Operation | Cost |
+|---|---|
+| `RPOP key COUNT 100` | 1 command |
+| 100 pipelined `RPOP`s | 100 commands |
+| `RPUSH key v1 … v50` | 1 command |
+| 50 pipelined `RPUSH`es | 50 commands |
+
+The ingest poller also backs off when the queue is empty — it drops from one
+poll every 5s to one every 30s, and returns to 5s the moment events appear.
+Idle cost is roughly **100K commands/month**, comfortably inside the free tier.
+
+Rough budget check before changing any polling interval:
+
+```
+commands/month = (commands per poll) x (86400 / interval_seconds) x 30
+```
+
+At one command per 5s that is 518K/month — already over the limit on its own,
+which is why the backoff exists.
+
+### C2. Redis is down but the API must stay up
+
+Redis is a **degradable** dependency, not a required one. Metrics, dashboards,
+Explorer and Funnels are served entirely from Postgres. When Redis is
+unavailable:
+
+- the app still **starts** and serves every read endpoint;
+- rate limiting **fails open** (requests are allowed, not rejected);
+- live WebSocket updates stop, and reconnect on their own once Redis returns;
+- **ingestion stops** — new events cannot be queued;
+- `/api/v1/health/ready` returns **200** with `"redis": "degraded"`.
+
+Readiness deliberately tracks **Postgres only**. If it failed on Redis, a cache
+outage would pull the whole service out of rotation.
+
 ---
 
 # §D — The API is not running at all
@@ -144,6 +207,11 @@ and no server-side logout.
    during startup. EventPulse runs `alembic upgrade head` before uvicorn, so a
    dead database prevents the server from ever starting — that is why it times
    out instead of returning 503. Fix the database first (§B).
+   *Redis can no longer cause this.* It once could: startup awaited
+   `rate_limiter.initialize()`, which re-raised, so an exhausted Redis quota
+   stopped the app from booting and took down every endpoint — including the
+   ones that never touch Redis. Startup now degrades instead of raising
+   (§C2), covered by `tests/unit/test_redis_degradation.py`.
 4. Free instances sleep after ~15 minutes idle; the first request then takes
    30–60 seconds. That is not an outage.
 
