@@ -11,6 +11,20 @@ from app.models.api_key import APIKey
 from app.schemas.ingest import EventCreate
 
 
+def _notify_poller() -> None:
+    """
+    Wake the in-process ingest poller so it drains on its next tick instead of
+    waiting for its safety-net interval. Imported lazily to avoid a circular
+    import (tasks_ingest imports the event processor, which imports services).
+    Never allowed to fail an ingest — the safety-net poll is the fallback.
+    """
+    try:
+        from app.tasks.tasks_ingest import notify_pending
+        notify_pending()
+    except Exception:  # pragma: no cover - defensive
+        pass
+
+
 class IngestionService:
     """
     Service for handling event ingestion.
@@ -61,7 +75,8 @@ class IngestionService:
             "event_queue",
             json.dumps(event_payload, default=str)
         )
-        
+        _notify_poller()
+
         return {
             "success": True,
             "queued": True,
@@ -113,6 +128,7 @@ class IngestionService:
         # One command for the whole batch
         if payloads:
             await self.redis.rpush("event_queue", *payloads)
+            _notify_poller()
 
         return {
             "success": True,

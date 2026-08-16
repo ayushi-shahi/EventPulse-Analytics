@@ -63,23 +63,25 @@ class _Recorder:
 
 @pytest.fixture
 def poller(monkeypatch):
-    """Reset the module's backoff state and swap in a recording client."""
+    """Reset the module's poll state and swap in a recording client."""
     from app.tasks import tasks_ingest
 
-    monkeypatch.setattr(tasks_ingest, "_idle_streak", 0, raising=False)
-    monkeypatch.setattr(tasks_ingest, "_ticks_to_skip", 0, raising=False)
+    monkeypatch.setattr(tasks_ingest, "_pending", False, raising=False)
+    monkeypatch.setattr(tasks_ingest, "_last_poll", 0.0, raising=False)
 
-    def _install(client):
+    def _install(client, *, armed=True):
         monkeypatch.setattr(tasks_ingest, "_client", client, raising=False)
         monkeypatch.setattr(tasks_ingest, "_get_client", lambda: client)
+        if armed:
+            tasks_ingest.notify_pending()
         return tasks_ingest
 
     return _install
 
 
 @pytest.mark.asyncio
-async def test_empty_poll_costs_one_command(poller):
-    """An idle queue must cost exactly one command, not `batch_size`."""
+async def test_signalled_poll_costs_one_command(poller):
+    """Draining a signalled queue must cost one command, not `batch_size`."""
     redis = _Recorder()
     ti = poller(redis)
 
@@ -89,21 +91,65 @@ async def test_empty_poll_costs_one_command(poller):
 
 
 @pytest.mark.asyncio
-async def test_idle_polling_backs_off(poller):
-    """Sustained idleness must stop burning quota on every 5s tick."""
+async def test_unsignalled_ticks_do_not_touch_redis(poller):
+    """
+    With nothing queued through this process, ticks must be free. This is the
+    whole budget: polling an empty queue every 5s is what burned the quota.
+    """
     redis = _Recorder()
+    ti = poller(redis, armed=False)
+    ti._last_poll = __import__("time").monotonic()  # safety net not yet due
+
+    for _ in range(60):  # 5 minutes of ticks
+        await ti.process_event_batch(batch_size=100)
+
+    assert redis.commands == []
+
+
+@pytest.mark.asyncio
+async def test_idle_cost_stays_under_fifty_commands_per_hour(poller):
+    """The safety-net poll alone must keep idle cost far below the free tier."""
+    from app.tasks import tasks_ingest
+
+    commands_per_hour = 3600 / tasks_ingest.IDLE_POLL_SECONDS
+    assert commands_per_hour <= 50
+    # ...and comfortably inside 500K/month.
+    assert commands_per_hour * 24 * 31 < 100_000
+
+
+@pytest.mark.asyncio
+async def test_enqueue_wakes_the_poller(poller):
+    """An event queued through this process is drained on the next tick."""
+    redis = _Recorder()
+    ti = poller(redis, armed=False)
+    ti._last_poll = __import__("time").monotonic()
+
+    await ti.process_event_batch(batch_size=100)
+    assert redis.commands == []          # nothing signalled yet
+
+    ti.notify_pending()                  # what the ingest endpoint calls
+    await ti.process_event_batch(batch_size=100)
+    assert redis.commands == ["rpop"]    # drained immediately
+
+
+@pytest.mark.asyncio
+async def test_enqueue_racing_a_poll_is_not_swallowed(poller):
+    """
+    An enqueue landing *while* a poll is in flight must not be lost: the flag is
+    cleared before dequeuing, so the racing notify re-arms it.
+    """
+    from app.tasks import tasks_ingest
+
+    class _Racing(_Recorder):
+        async def rpop(self, key, count=None):
+            tasks_ingest.notify_pending()   # enqueue lands mid-poll
+            return await super().rpop(key, count)
+
+    redis = _Racing()
     ti = poller(redis)
 
-    for _ in range(30):  # ramp down into steady state
-        await ti.process_event_batch(batch_size=100)
-
-    redis.commands.clear()
-    for _ in range(60):  # 60 ticks x 5s = 5 more minutes, fully backed off
-        await ti.process_event_batch(batch_size=100)
-
-    # Old behaviour: 60 * 100 = 6,000 commands for the same five minutes.
-    # New: one poll per 30s, i.e. one per six 5s ticks.
-    assert len(redis.commands) == 10
+    await ti.process_event_batch(batch_size=100)
+    assert ti._pending is True           # will drain again next tick
 
 
 @pytest.mark.asyncio

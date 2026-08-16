@@ -165,18 +165,31 @@ consumer now use *variadic* commands, which really are one command:
 | `RPUSH key v1 … v50` | 1 command |
 | 50 pipelined `RPUSH`es | 50 commands |
 
-The ingest poller also backs off when the queue is empty — it drops from one
-poll every 5s to one every 30s, and returns to 5s the moment events appear.
-Idle cost is roughly **100K commands/month**, comfortably inside the free tier.
+**The poller mostly does not poll.** APScheduler runs inside the FastAPI
+process, so the ingest endpoint tells it directly when there is work
+(`notify_pending()` in `app/tasks/tasks_ingest.py`). A tick with no signal
+issues no Redis command at all.
 
-Rough budget check before changing any polling interval:
+`IDLE_POLL_SECONDS` (default 300) is only a safety net, for events queued by
+something other than this process. So:
+
+| | Commands |
+|---|---|
+| Idle, per hour | **12** (safety net only) |
+| One traffic burst | **2** (1 RPUSH + 1 RPOP, any batch size) |
+| Projected total | **~10K/month — about 2% of the free tier** |
+
+Locally ingested events are still picked up within one 5s tick, so this is both
+cheaper *and* lower latency than polling unconditionally.
+
+Budget check before changing `IDLE_POLL_SECONDS`:
 
 ```
-commands/month = (commands per poll) x (86400 / interval_seconds) x 30
+idle commands/hour = 3600 / IDLE_POLL_SECONDS
 ```
 
-At one command per 5s that is 518K/month — already over the limit on its own,
-which is why the backoff exists.
+Note what *not* to do: polling every 5s costs 518K/month on its own — over the
+limit before a single event is ingested. Never make the poller unconditional.
 
 ### C2. Redis is down but the API must stay up
 

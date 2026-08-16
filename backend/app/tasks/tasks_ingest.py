@@ -11,14 +11,20 @@ queued call — not one for the pipeline. An earlier version pipelined
 `batch_size` RPOPs on every tick, so an *idle* queue still cost 100 commands
 every 5s (~1.7M/day) and exhausted a 500K/month plan in hours.
 
-Two changes keep the steady-state cost flat:
-  * `RPOP key COUNT n` pops the whole batch in a single command.
-  * When the queue keeps coming back empty the job backs off (see
-    `_SKIP_TICKS`) so an idle deployment polls once every 30s, not 5s.
-A batch that returns events resets the backoff, so live traffic is still
-drained at the full 5s cadence.
+Polling an empty queue is pure waste, so this job mostly does not poll at all.
+APScheduler runs inside the FastAPI process, so the ingest endpoint that writes
+to the queue can just say so: `notify_pending()` sets an in-process flag and the
+next 5s tick drains the queue immediately. No flag, no Redis call.
+
+`IDLE_POLL_SECONDS` is only a safety net, for events queued by something other
+than this process (a second instance, or a manual push). At the default of five
+minutes the idle cost is **12 commands/hour**, and a locally ingested event is
+still picked up within one 5s tick — faster than the old unconditional poll.
+
+  idle commands/hour = 3600 / IDLE_POLL_SECONDS
 """
 import logging
+from time import monotonic
 from typing import List, Optional
 
 import redis.asyncio as aioredis
@@ -28,13 +34,21 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Idle backoff, indexed by how many consecutive polls came back empty.
-# Values are how many 5s ticks to skip before touching Redis again:
-# 5s while busy, degrading to one poll per 30s when nothing is arriving.
-_SKIP_TICKS = (0, 0, 0, 1, 2, 5)
+# Safety-net poll interval for work this process was never told about.
+IDLE_POLL_SECONDS = 300
 
-_idle_streak = 0
-_ticks_to_skip = 0
+# Set by notify_pending() when this process queues an event.
+_pending = False
+_last_poll = 0.0
+
+
+def notify_pending() -> None:
+    """
+    Tell the poller there is work, so it drains on the next tick instead of
+    waiting for the safety-net interval. Called after a successful enqueue.
+    """
+    global _pending
+    _pending = True
 
 # One shared connection, reused across invocations. Reconnecting every 5s
 # meant a fresh TLS handshake and AUTH each time, for no benefit.
@@ -93,20 +107,24 @@ async def _requeue_events(events: List[str]) -> None:
 
 async def process_event_batch(batch_size: int = 100):
     """Pull events from Redis and insert into PostgreSQL."""
-    global _idle_streak, _ticks_to_skip
+    global _pending, _last_poll
 
-    if _ticks_to_skip > 0:
-        _ticks_to_skip -= 1
+    now = monotonic()
+    if not _pending and (now - _last_poll) < IDLE_POLL_SECONDS:
         return
+
+    # Clear before dequeuing: an enqueue racing with this call must re-arm the
+    # flag rather than be swallowed by us clearing it afterwards.
+    _pending = False
+    _last_poll = now
 
     events = await _dequeue_events(batch_size)
     if not events:
-        _idle_streak = min(_idle_streak + 1, len(_SKIP_TICKS) - 1)
-        _ticks_to_skip = _SKIP_TICKS[_idle_streak]
         return
 
-    _idle_streak = 0
-    _ticks_to_skip = 0
+    # A full batch probably means more is waiting — come back next tick.
+    if len(events) >= batch_size:
+        _pending = True
 
     logger.info(f"process_event_batch: processing {len(events)} events")
     processor = EventProcessor()
